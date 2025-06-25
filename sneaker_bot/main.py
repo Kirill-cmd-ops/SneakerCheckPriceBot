@@ -1,9 +1,13 @@
-import asyncio
 import os
+import time
+import asyncio
+import aiohttp
+import feedparser
+from calendar import timegm
+from typing import List
 from dotenv import load_dotenv
 
-
-
+from aiogram.filters.callback_data import CallbackData
 from aiogram import Dispatcher, Bot
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
@@ -14,6 +18,9 @@ from aiogram.fsm.context import FSMContext
 load_dotenv()
 BOT_TOKEN = os.getenv("SECRET_TOKEN_BOT")
 ID_CHANNEL = os.getenv("ID_CHANNEL")
+NEWS_URL = os.getenv("NEWS_URL")
+MAX_PAGES = int(os.getenv("MAX_PAGES"))
+LAST_HOURS = int(os.getenv("LAST_HOURS"))
 
 sub_menu = InlineKeyboardMarkup(
     inline_keyboard=[
@@ -179,9 +186,70 @@ async def order_button(query: CallbackQuery):
     await query.answer()
 
 
-@dp.callback_query(lambda c: c.data == "news_button")
-async def news_button(query: CallbackQuery):
-    pass
+class RssCb(CallbackData, prefix="rss"):
+    idx: int
+
+
+async def fetch_rss_page(session: aiohttp.ClientSession, page: int):
+    url = NEWS_URL if page == 1 else f"{NEWS_URL}?paged={page}"
+    async with session.get(url, timeout=5) as resp:
+        if resp.status == 404:
+            return []
+        resp.raise_for_status()
+        txt = await resp.text()
+    return feedparser.parse(txt).entries
+
+
+async def fetch_entries_last_day() -> List[feedparser.FeedParserDict]:
+    cutoff_ts = time.time() - LAST_HOURS * 3600
+    recent = []
+
+    async with aiohttp.ClientSession() as session:
+        for page in range(1, MAX_PAGES + 1):
+            entries = await fetch_rss_page(session, page)
+            if not entries:
+                break
+
+            for entry in entries:
+                if not entry.get("published_parsed"):
+                    continue
+                ts = timegm(entry.published_parsed)
+                if ts >= cutoff_ts:
+                    recent.append(entry)
+                else:
+                    break
+            else:
+                await asyncio.sleep(1)
+                continue
+            break
+
+    return recent
+
+
+def make_nav_kb(idx: int, max_idx: int) -> InlineKeyboardMarkup:
+    buttons = []
+    if idx > 0:
+        buttons.append(
+            InlineKeyboardButton(
+                text="⬅️",
+                callback_data=RssCb(idx=idx - 1).pack()
+            )
+        )
+    buttons.append(
+        InlineKeyboardButton(
+            text="Закрыть",
+            callback_data="close_news"
+        )
+    )
+    if idx < max_idx:
+        buttons.append(
+            InlineKeyboardButton(
+                text="➡️",
+                callback_data=RssCb(idx=idx + 1).pack()
+            )
+        )
+    return InlineKeyboardMarkup(inline_keyboard=[buttons])
+
 
 # обработчик кнопки назад
 @dp.callback_query(lambda c: c.data == "back_main")
@@ -191,6 +259,60 @@ async def back_main_button(query: CallbackQuery):
         text="Выберите пункт меню:",
         reply_markup=head_menu
     )
+
+
+@dp.callback_query(lambda c: c.data == "news_button")
+async def news_start(query: CallbackQuery, state: FSMContext):
+    await query.answer()
+    entries = await fetch_entries_last_day()
+    if not entries:
+        return await query.message.answer("❌ За последние сутки новостей не найдено.")
+
+    # сохранить список в состоянии
+    await state.update_data(rss_entries=entries)
+
+    # показать первую запись
+    idx = 0
+    entry = entries[idx]
+    kb = make_nav_kb(idx, len(entries) - 1)
+    await query.message.edit_text(
+        f"<b>{entry.title}</b>\n{entry.link}",
+        reply_markup=kb
+    )
+
+
+# ─── Навигация RSS: вперёд/назад ───────────────────────
+@dp.callback_query(RssCb.filter())
+async def news_nav(query: CallbackQuery, callback_data: RssCb, state: FSMContext):
+    await query.answer()
+    data = await state.get_data()
+    entries = data.get("rss_entries", [])
+    idx = callback_data.idx
+
+    if not entries or not (0 <= idx < len(entries)):
+        return await query.message.answer("❌ Ошибка навигации по новостям.")
+
+    entry = entries[idx]
+    kb = make_nav_kb(idx, len(entries) - 1)
+    await query.message.edit_text(
+        f"<b>{entry.title}</b>\n{entry.link}",
+        reply_markup=kb
+    )
+
+
+# ─── Закрыть ленту новостей ───────────────────────────
+@dp.callback_query(lambda c: c.data == "close_news")
+async def close_news(query: CallbackQuery, state: FSMContext):
+    await query.answer("Закрыто")
+    await query.message.delete()
+
+    # вернуть главное меню
+    sent = await query.message.answer(
+        text="Выберите пункт меню:",
+        reply_markup=head_menu
+    )
+    # обновим FSM: последнее меню — это вновь отправленное
+    await state.update_data(menu_msg_id=sent.message_id)
 
 
 async def main():
