@@ -251,7 +251,6 @@ def make_nav_kb(idx: int, max_idx: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[buttons])
 
 
-# обработчик кнопки назад
 @dp.callback_query(lambda c: c.data == "back_main")
 async def back_main_button(query: CallbackQuery):
     await query.answer()
@@ -264,14 +263,19 @@ async def back_main_button(query: CallbackQuery):
 @dp.callback_query(lambda c: c.data == "news_button")
 async def news_start(query: CallbackQuery, state: FSMContext):
     await query.answer()
+    load_msg = await query.message.answer("Ищем интересные новости...")
     entries = await fetch_entries_last_day()
-    if not entries:
-        return await query.message.answer("❌ За последние сутки новостей не найдено.")
 
-    # сохранить список в состоянии
+    try:
+        await load_msg.delete()
+    except:
+        pass
+
+    if not entries:
+        return await query.message.answer("За последние сутки новостей не найдено.")
+
     await state.update_data(rss_entries=entries)
 
-    # показать первую запись
     idx = 0
     entry = entries[idx]
     kb = make_nav_kb(idx, len(entries) - 1)
@@ -281,7 +285,6 @@ async def news_start(query: CallbackQuery, state: FSMContext):
     )
 
 
-# ─── Навигация RSS: вперёд/назад ───────────────────────
 @dp.callback_query(RssCb.filter())
 async def news_nav(query: CallbackQuery, callback_data: RssCb, state: FSMContext):
     await query.answer()
@@ -290,7 +293,7 @@ async def news_nav(query: CallbackQuery, callback_data: RssCb, state: FSMContext
     idx = callback_data.idx
 
     if not entries or not (0 <= idx < len(entries)):
-        return await query.message.answer("❌ Ошибка навигации по новостям.")
+        return await query.message.answer("Ошибка навигации по новостям.")
 
     entry = entries[idx]
     kb = make_nav_kb(idx, len(entries) - 1)
@@ -300,7 +303,6 @@ async def news_nav(query: CallbackQuery, callback_data: RssCb, state: FSMContext
     )
 
 
-# ─── Закрыть ленту новостей ───────────────────────────
 @dp.callback_query(lambda c: c.data == "close_news")
 async def close_news(query: CallbackQuery, state: FSMContext):
     await query.answer("Закрыто")
@@ -311,7 +313,6 @@ async def close_news(query: CallbackQuery, state: FSMContext):
         text="Выберите пункт меню:",
         reply_markup=head_menu
     )
-    # обновим FSM: последнее меню — это вновь отправленное
     await state.update_data(menu_msg_id=sent.message_id)
 
 
