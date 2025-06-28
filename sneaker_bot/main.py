@@ -152,7 +152,7 @@ async def start_command(message: Message, state: FSMContext):
         )
     else:
         sent = await message.answer(
-            text="Выберите интересующий пункт меню:",
+            text="Выберите действие:",
             reply_markup=head_menu
         )
 
@@ -169,7 +169,11 @@ async def check_button(query: CallbackQuery):
     await query.message.delete()
     await query.answer()
     await query.message.answer(
-        text="Привет",
+        text="""
+        Привет, спасибо за подписку на канал!
+Тут будет публиковаться полезная и интересная информация
+Выберите действие:
+        """,
         reply_markup=head_menu
     )
 
@@ -291,7 +295,7 @@ async def know_button_query(message: Message, state: FSMContext):
 async def back_main(query: CallbackQuery, state: FSMContext):
     await query.answer()
     await state.clear()
-    await query.message.edit_text("Выберите пункт меню:", reply_markup=head_menu)
+    await query.message.edit_text("Выберите действие:", reply_markup=head_menu)
 
 
 @dp.callback_query(lambda c: c.data == "order_button")
@@ -372,7 +376,7 @@ def make_nav_kb(idx: int, max_idx: int) -> InlineKeyboardMarkup:
 async def back_main_button(query: CallbackQuery):
     await query.answer()
     await query.message.answer(
-        text="Выберите пункт меню:",
+        text="Выберите действие:",
         reply_markup=head_menu
     )
 
@@ -426,7 +430,7 @@ async def close_news(query: CallbackQuery, state: FSMContext):
     await query.message.delete()
 
     sent = await query.message.answer(
-        text="Выберите пункт меню:",
+        text="Выберите действие:",
         reply_markup=head_menu
     )
     await state.update_data(menu_msg_id=sent.message_id)
