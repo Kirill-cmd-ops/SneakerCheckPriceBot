@@ -1,10 +1,15 @@
 import os
 import time
 import asyncio
+from urllib.parse import urlparse, parse_qs
+
 import aiohttp
 import feedparser
 from calendar import timegm
 from typing import List
+
+from aiogram.fsm.state import State, StatesGroup
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 from aiogram.filters.callback_data import CallbackData
@@ -21,6 +26,24 @@ ID_CHANNEL = os.getenv("ID_CHANNEL")
 NEWS_URL = os.getenv("NEWS_URL")
 MAX_PAGES = int(os.getenv("MAX_PAGES"))
 LAST_HOURS = int(os.getenv("LAST_HOURS"))
+BASE = os.getenv("BASE_URL")
+CATALOGS = [
+    BASE + os.getenv("CATALOG_MEN_PATH"),
+    BASE + os.getenv("CATALOG_WOMEN_PATH"),
+]
+
+SNEAKERS = {
+    "женские": os.getenv("SNEAKERS_WOMEN_URL"),
+    "мужские": os.getenv("SNEAKERS_MEN_URL"),
+}
+
+HEADERS = {
+    "User-Agent": os.getenv("USER_AGENT")
+}
+
+MAX_PAGES_BUNT = int(os.getenv("MAX_PAGES_BUNT", 1))
+MAX_PAGES_SNEAK = int(os.getenv("MAX_PAGES_SNEAK", 1))
+PER_CAT = int(os.getenv("PER_CAT", 5))
 
 sub_menu = InlineKeyboardMarkup(
     inline_keyboard=[
@@ -47,18 +70,8 @@ head_menu = InlineKeyboardMarkup(
                 callback_data="know_button"
             ),
             InlineKeyboardButton(
-                text="Избранное",
-                callback_data="favorite_button"
-            )
-        ],
-        [
-            InlineKeyboardButton(
                 text="Новости",
                 callback_data="news_button"
-            ),
-            InlineKeyboardButton(
-                text="Помощь",
-                url="tg://resolve?domain=SkForbes"
             )
         ],
         [
@@ -66,7 +79,13 @@ head_menu = InlineKeyboardMarkup(
                 text="Заказать кроссовки",
                 callback_data="order_button"
             )
-        ]
+        ],
+        [
+            InlineKeyboardButton(
+                text="Помощь",
+                url="tg://resolve?domain=SkForbes"
+            )
+        ],
     ]
 )
 
@@ -137,11 +156,9 @@ async def start_command(message: Message, state: FSMContext):
             reply_markup=head_menu
         )
 
-    # 3) сохраняем ID этого меню в FSM
     await state.update_data(menu_msg_id=sent.message_id)
 
 
-# проверка на подписку
 @dp.callback_query(lambda c: c.data == "check_button")
 async def check_button(query: CallbackQuery):
     if not await is_sub(bot, query.from_user.id):
@@ -157,26 +174,126 @@ async def check_button(query: CallbackQuery):
     )
 
 
-# обработчик кнопки узнать цены
+class KnowPriceSG(StatesGroup):
+    waiting_for_query = State()
+
+
 @dp.callback_query(lambda c: c.data == "know_button")
-async def know_button(query: CallbackQuery):
-    await query.message.delete()
+async def know_button_start(query: CallbackQuery, state: FSMContext):
     await query.answer()
-    await query.message.answer(
-        text="Узнаем цены..."
-    )
-
-    await query.message.answer(
-        text="""
-        Цены вашего товара:
-        ...
-        ...
-        ...""",
-        reply_markup=know_menu,
-    )
+    await query.message.delete()
+    await state.set_state(KnowPriceSG.waiting_for_query)
+    await bot.send_message(query.from_user.id, "Введите часть названия кроссовок:", reply_markup=back_menu)
 
 
-# обработчик кнопки заказать кроссовки
+@dp.message(KnowPriceSG.waiting_for_query)
+async def know_button_query(message: Message, state: FSMContext):
+    q = message.text.strip().lower()
+    loading = await message.answer("Ищем…")
+    raw_bunt = {"muzhskie": [], "zhenskie": []}
+    raw_snk = {"женские": [], "мужские": []}
+
+    async with aiohttp.ClientSession(headers=HEADERS) as s:
+        # bunt.by
+        for url0 in CATALOGS:
+            key = "muzhskie" if "muzhskie" in url0 else "zhenskie"
+            r = await s.get(url0 + "/")
+            if r.status != 200: continue
+            soup = BeautifulSoup(await r.text(), "lxml")
+            nxt = soup.select_one('a.pagination__link[href*="/page/1/"]')
+            sid = ""
+            if nxt:
+                pr = urlparse(nxt["href"])
+                sid = parse_qs(pr.query).get("srsltid", [""])[0]
+
+            def parse1(sp):
+                for a in sp.select("a.product-title-link"):
+                    t = a.get_text(strip=True)
+                    if q in t.lower():
+                        h = a["href"]
+                        full = h if h.startswith("http") else BASE + h
+                        raw_bunt[key].append((t, full))
+                        if len(raw_bunt[key]) >= PER_CAT: return True
+                return False
+
+            done = parse1(soup)
+            for p in range(2, MAX_PAGES_BUNT + 1):
+                if done or len(raw_bunt[key]) >= PER_CAT: break
+                u = f"{url0}/page/{p}/"
+                if sid: u += f"?srsltid={sid}"
+                rr = await s.get(u)
+                if rr.status != 200: break
+                done = parse1(BeautifulSoup(await rr.text(), "lxml"))
+
+        # sneakers.by
+        for kind, base in SNEAKERS.items():
+            for p in range(1, MAX_PAGES_SNEAK + 1):
+                if len(raw_snk[kind]) >= PER_CAT: break
+                u = f"{base}?page={p}"
+                r = await s.get(u)
+                if r.status != 200: break
+                sp = BeautifulSoup(await r.text(), "lxml")
+                for a in sp.select("a[href*='/katalog/obuv-belarus/']:not(.pagination__link)"):
+                    t = a.get_text(strip=True)
+                    if q in t.lower():
+                        h = a["href"]
+                        full = h if h.startswith("http") else a.base_url + h
+                        raw_snk[kind].append((t, full))
+                        if len(raw_snk[kind]) >= PER_CAT: break
+
+        async def price_b(item):
+            t, u = item
+            try:
+                r = await s.get(u);
+                r.raise_for_status()
+                ds = BeautifulSoup(await r.text(), "lxml")
+                pe = ds.select_one("div.product_after_shop_loop_price span.price")
+                return t, pe.get_text(" ", strip=True) if pe else "—", u
+            except:
+                return t, "ошибка", u
+
+        async def price_s(item):
+            t, u = item
+            try:
+                r = await s.get(u);
+                r.raise_for_status()
+                ds = BeautifulSoup(await r.text(), "lxml")
+                pe = ds.select_one("p.price")
+                return t, pe.get_text(" ", strip=True) if pe else "—", u
+            except:
+                return t, "ошибка", u
+
+        fb = {k: await asyncio.gather(*[price_b(i) for i in v]) for k, v in raw_bunt.items()}
+        fs = {k: await asyncio.gather(*[price_s(i) for i in v]) for k, v in raw_snk.items()}
+
+    await loading.delete()
+    parts = []
+    for shop, data, caps in [
+        ("bunt.by", fb, {"muzhskie": "Мужские", "zhenskie": "Женские"}),
+        ("sneakers.by", fs, {"мужские": "Мужские", "женские": "Женские"})
+    ]:
+        parts.append(f"<b>Магазин:</b> {shop}");
+        parts.append("")
+        for k, cap in caps.items():
+            blk = data.get(k, [])
+            if not blk: continue
+            parts.append(f"<b>{cap}</b>")
+            for i, (t, p, u) in enumerate(blk, 1):
+                parts.append(f"{i}. {t}\n   Цена: <code>{p}</code>\n   <a href=\"{u}\">Ссылка</a>")
+            parts.append("")
+
+    text = "\n".join(parts).strip()
+    await message.answer(text or "Ничего не найдено.", reply_markup=know_menu, disable_web_page_preview=True)
+    await state.clear()
+
+
+@dp.callback_query(lambda c: c.data == "back_main")
+async def back_main(query: CallbackQuery, state: FSMContext):
+    await query.answer()
+    await state.clear()
+    await query.message.edit_text("Выберите пункт меню:", reply_markup=head_menu)
+
+
 @dp.callback_query(lambda c: c.data == "order_button")
 async def order_button(query: CallbackQuery):
     await query.answer(
@@ -308,7 +425,6 @@ async def close_news(query: CallbackQuery, state: FSMContext):
     await query.answer("Закрыто")
     await query.message.delete()
 
-    # вернуть главное меню
     sent = await query.message.answer(
         text="Выберите пункт меню:",
         reply_markup=head_menu
