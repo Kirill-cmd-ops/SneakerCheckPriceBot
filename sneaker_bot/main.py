@@ -31,16 +31,13 @@ CATALOGS = [
     BASE + os.getenv("CATALOG_MEN_PATH"),
     BASE + os.getenv("CATALOG_WOMEN_PATH"),
 ]
-
 SNEAKERS = {
     "женские": os.getenv("SNEAKERS_WOMEN_URL"),
     "мужские": os.getenv("SNEAKERS_MEN_URL"),
 }
-
 HEADERS = {
     "User-Agent": os.getenv("USER_AGENT")
 }
-
 MAX_PAGES_BUNT = int(os.getenv("MAX_PAGES_BUNT", 1))
 MAX_PAGES_SNEAK = int(os.getenv("MAX_PAGES_SNEAK", 1))
 PER_CAT = int(os.getenv("PER_CAT", 5))
@@ -100,22 +97,7 @@ back_menu = InlineKeyboardMarkup(
     ]
 )
 
-know_menu = InlineKeyboardMarkup(
-    inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="Добавить в избранное",
-                callback_data="back_main"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="Назад",
-                callback_data="back_main"
-            )
-        ]
-    ]
-)
+know_menu = back_menu
 
 bot = Bot(
     token=BOT_TOKEN,
@@ -152,7 +134,7 @@ async def start_command(message: Message, state: FSMContext):
         )
     else:
         sent = await message.answer(
-            text="Выберите действие:",
+            text="Выберите дальнейшее действие:",
             reply_markup=head_menu
         )
 
@@ -187,13 +169,30 @@ async def know_button_start(query: CallbackQuery, state: FSMContext):
     await query.answer()
     await query.message.delete()
     await state.set_state(KnowPriceSG.waiting_for_query)
-    await bot.send_message(query.from_user.id, "Введите часть названия кроссовок:", reply_markup=back_menu)
+    name_model_message = await bot.send_message(query.from_user.id,
+                                                "Введите название кроссовок:",
+                                                reply_markup=back_menu)
+    await state.update_data(prompt_id=name_model_message.message_id)
 
 
 @dp.message(KnowPriceSG.waiting_for_query)
 async def know_button_query(message: Message, state: FSMContext):
+    data = await state.get_data()
+    message_id = data.get("prompt_id")
+
+    if message_id:
+        try:
+            await bot.delete_message(chat_id=message.chat.id, message_id=message_id)
+        except:
+            pass
+
+    try:
+        await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+    except:
+        pass
+
     q = message.text.strip().lower()
-    loading = await message.answer("Ищем…")
+    loading = await message.answer("Ищем указанную модель кроссовок и схожие модели…")
     raw_bunt = {"muzhskie": [], "zhenskie": []}
     raw_snk = {"женские": [], "мужские": []}
 
@@ -287,15 +286,8 @@ async def know_button_query(message: Message, state: FSMContext):
             parts.append("")
 
     text = "\n".join(parts).strip()
-    await message.answer(text or "Ничего не найдено.", reply_markup=know_menu, disable_web_page_preview=True)
+    await message.answer(text, reply_markup=know_menu, disable_web_page_preview=True)
     await state.clear()
-
-
-@dp.callback_query(lambda c: c.data == "back_main")
-async def back_main(query: CallbackQuery, state: FSMContext):
-    await query.answer()
-    await state.clear()
-    await query.message.edit_text("Выберите действие:", reply_markup=head_menu)
 
 
 @dp.callback_query(lambda c: c.data == "order_button")
@@ -375,8 +367,9 @@ def make_nav_kb(idx: int, max_idx: int) -> InlineKeyboardMarkup:
 @dp.callback_query(lambda c: c.data == "back_main")
 async def back_main_button(query: CallbackQuery):
     await query.answer()
+    await query.message.delete()
     await query.message.answer(
-        text="Выберите действие:",
+        text="Выберите дальнейшее действие:",
         reply_markup=head_menu
     )
 
@@ -426,11 +419,11 @@ async def news_nav(query: CallbackQuery, callback_data: RssCb, state: FSMContext
 
 @dp.callback_query(lambda c: c.data == "close_news")
 async def close_news(query: CallbackQuery, state: FSMContext):
-    await query.answer("Закрыто")
+    await query.answer()
     await query.message.delete()
 
     sent = await query.message.answer(
-        text="Выберите действие:",
+        text="Выберите дальнейшее действие:",
         reply_markup=head_menu
     )
     await state.update_data(menu_msg_id=sent.message_id)
