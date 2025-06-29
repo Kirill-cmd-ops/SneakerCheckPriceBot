@@ -11,6 +11,7 @@ from typing import List
 from aiogram.fsm.state import State, StatesGroup
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from functools import wraps
 
 from aiogram.filters.callback_data import CallbackData
 from aiogram import Dispatcher, Bot
@@ -107,7 +108,7 @@ bot = Bot(
 dp = Dispatcher()
 
 
-async def is_sub(bot: Bot, user_id: int) -> bool:
+async def checker(bot: Bot, user_id: int) -> bool:
     member = await bot.get_chat_member(
         chat_id=ID_CHANNEL,
         user_id=user_id,
@@ -115,19 +116,59 @@ async def is_sub(bot: Bot, user_id: int) -> bool:
     return member.status not in ("left", "kicked")
 
 
+def is_sub(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        msg = None
+        query = None
+        for arg in args:
+            if isinstance(arg, Message):
+                msg = arg
+            elif isinstance(arg, CallbackQuery):
+                query = arg
+
+        if query:
+            user_id = query.from_user.id
+            chat_id = query.message.chat.id
+
+        elif msg:
+            user_id = msg.from_user.id
+            chat_id = msg.chat.id
+
+        else:
+            return await func(*args, **kwargs)
+
+        if not await checker(bot, user_id):
+            if query:
+                return await query.message.answer(
+                    "Чтобы пользоваться, подпишись на канал",
+                    reply_markup=sub_menu,
+                )
+            else:
+                return await bot.send_message(
+                    chat_id,
+                    "Чтобы пользоваться, подпишись на канал",
+                    reply_markup=sub_menu,
+                )
+
+        return await func(*args, **kwargs)
+
+    return wrapper
+
+
 @dp.message(Command("start"))
 async def start_command(message: Message, state: FSMContext):
     user_id = message.from_user.id
 
     data = await state.get_data()
-    old_menu_id = data.get("menu_msg_id")
-    if old_menu_id:
+    message_id = data.get("menu_msg_id")
+    if message_id:
         try:
-            await bot.delete_message(message.chat.id, old_menu_id)
+            await bot.delete_message(message.chat.id, message_id)
         except Exception:
             pass
 
-    if not await is_sub(bot, user_id):
+    if not await checker(bot, user_id):
         sent = await message.answer(
             "Чтобы пользоваться, подпишись на канал",
             reply_markup=sub_menu,
@@ -142,12 +183,8 @@ async def start_command(message: Message, state: FSMContext):
 
 
 @dp.callback_query(lambda c: c.data == "check_button")
+@is_sub
 async def check_button(query: CallbackQuery):
-    if not await is_sub(bot, query.from_user.id):
-        return await query.answer(
-            text="Вы не подписаны на канал",
-            show_alert=True,
-        )
     await query.message.delete()
     await query.answer()
     await query.message.answer(
@@ -165,6 +202,7 @@ class KnowPriceSG(StatesGroup):
 
 
 @dp.callback_query(lambda c: c.data == "know_button")
+@is_sub
 async def know_button_start(query: CallbackQuery, state: FSMContext):
     await query.answer()
     await query.message.delete()
@@ -176,6 +214,7 @@ async def know_button_start(query: CallbackQuery, state: FSMContext):
 
 
 @dp.message(KnowPriceSG.waiting_for_query)
+@is_sub
 async def know_button_query(message: Message, state: FSMContext):
     data = await state.get_data()
     message_id = data.get("prompt_id")
@@ -194,13 +233,13 @@ async def know_button_query(message: Message, state: FSMContext):
     q = message.text.strip().lower()
     loading = await message.answer("Ищем указанную модель кроссовок и схожие модели…")
     raw_bunt = {"muzhskie": [], "zhenskie": []}
-    raw_snk = {"женские": [], "мужские": []}
+    raw_sneaker = {"женские": [], "мужские": []}
 
     async with aiohttp.ClientSession(headers=HEADERS) as s:
         # bunt.by
-        for url0 in CATALOGS:
-            key = "muzhskie" if "muzhskie" in url0 else "zhenskie"
-            r = await s.get(url0 + "/")
+        for url in CATALOGS:
+            key = "muzhskie" if "muzhskie" in url else "zhenskie"
+            r = await s.get(url + "/")
             if r.status != 200: continue
             soup = BeautifulSoup(await r.text(), "lxml")
             nxt = soup.select_one('a.pagination__link[href*="/page/1/"]')
@@ -222,7 +261,7 @@ async def know_button_query(message: Message, state: FSMContext):
             done = parse1(soup)
             for p in range(2, MAX_PAGES_BUNT + 1):
                 if done or len(raw_bunt[key]) >= PER_CAT: break
-                u = f"{url0}/page/{p}/"
+                u = f"{url}/page/{p}/"
                 if sid: u += f"?srsltid={sid}"
                 rr = await s.get(u)
                 if rr.status != 200: break
@@ -231,7 +270,7 @@ async def know_button_query(message: Message, state: FSMContext):
         # sneakers.by
         for kind, base in SNEAKERS.items():
             for p in range(1, MAX_PAGES_SNEAK + 1):
-                if len(raw_snk[kind]) >= PER_CAT: break
+                if len(raw_sneaker[kind]) >= PER_CAT: break
                 u = f"{base}?page={p}"
                 r = await s.get(u)
                 if r.status != 200: break
@@ -241,8 +280,8 @@ async def know_button_query(message: Message, state: FSMContext):
                     if q in t.lower():
                         h = a["href"]
                         full = h if h.startswith("http") else a.base_url + h
-                        raw_snk[kind].append((t, full))
-                        if len(raw_snk[kind]) >= PER_CAT: break
+                        raw_sneaker[kind].append((t, full))
+                        if len(raw_sneaker[kind]) >= PER_CAT: break
 
         async def price_b(item):
             t, u = item
@@ -267,7 +306,7 @@ async def know_button_query(message: Message, state: FSMContext):
                 return t, "ошибка", u
 
         fb = {k: await asyncio.gather(*[price_b(i) for i in v]) for k, v in raw_bunt.items()}
-        fs = {k: await asyncio.gather(*[price_s(i) for i in v]) for k, v in raw_snk.items()}
+        fs = {k: await asyncio.gather(*[price_s(i) for i in v]) for k, v in raw_sneaker.items()}
 
     await loading.delete()
     parts = []
@@ -275,7 +314,7 @@ async def know_button_query(message: Message, state: FSMContext):
         ("bunt.by", fb, {"muzhskie": "Мужские", "zhenskie": "Женские"}),
         ("sneakers.by", fs, {"мужские": "Мужские", "женские": "Женские"})
     ]:
-        parts.append(f"<b>Магазин:</b> {shop}");
+        parts.append(f"<b>Магазин:</b> {shop}")
         parts.append("")
         for k, cap in caps.items():
             blk = data.get(k, [])
@@ -291,6 +330,7 @@ async def know_button_query(message: Message, state: FSMContext):
 
 
 @dp.callback_query(lambda c: c.data == "order_button")
+@is_sub
 async def order_button(query: CallbackQuery):
     await query.answer(
         text="В будущем тут будет ссылка на наш сайт",
@@ -375,6 +415,7 @@ async def back_main_button(query: CallbackQuery):
 
 
 @dp.callback_query(lambda c: c.data == "news_button")
+@is_sub
 async def news_start(query: CallbackQuery, state: FSMContext):
     await query.answer()
     load_msg = await query.message.answer("Ищем интересные новости...")
