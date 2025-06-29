@@ -139,17 +139,10 @@ def is_sub(func):
             return await func(*args, **kwargs)
 
         if not await checker(bot, user_id):
-            if query:
-                return await query.message.answer(
-                    "Чтобы пользоваться, подпишись на канал",
-                    reply_markup=sub_menu,
-                )
-            else:
-                return await bot.send_message(
-                    chat_id,
-                    "Чтобы пользоваться, подпишись на канал",
-                    reply_markup=sub_menu,
-                )
+            return await query.answer(
+                "Чтобы пользоваться, подпишись на канал",
+                show_alert=True,
+            )
 
         return await func(*args, **kwargs)
 
@@ -185,7 +178,6 @@ async def start_command(message: Message, state: FSMContext):
 @dp.callback_query(lambda c: c.data == "check_button")
 @is_sub
 async def check_button(query: CallbackQuery):
-    await query.message.delete()
     await query.answer()
     await query.message.answer(
         text="""
