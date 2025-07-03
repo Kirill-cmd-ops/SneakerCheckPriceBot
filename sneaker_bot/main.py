@@ -6,7 +6,7 @@ from urllib.parse import urlparse, parse_qs
 import aiohttp
 import feedparser
 from calendar import timegm
-from typing import List
+from typing import List, Union
 
 from aiogram.fsm.state import State, StatesGroup
 from bs4 import BeautifulSoup
@@ -149,25 +149,57 @@ def is_sub(func):
     return wrapper
 
 
+async def reply_and_store(
+        ctx: Union[Message, CallbackQuery],
+        state: FSMContext,
+        text: str,
+        **kwargs
+) -> Message:
+    if isinstance(ctx, CallbackQuery):
+        await ctx.answer()
+        sent = await ctx.message.answer(text, **kwargs)
+    else:
+        sent = await ctx.answer(text, **kwargs)
+
+    data = await state.get_data()
+    msg_ids = data.get("msg_ids", [])
+    msg_ids.append(sent.message_id)
+    await state.update_data(msg_ids=msg_ids)
+
+    return sent
+
+
 @dp.message(Command("start"))
 async def start_command(message: Message, state: FSMContext):
     user_id = message.from_user.id
+    chat_id = message.chat.id
 
     data = await state.get_data()
-    message_id = data.get("menu_msg_id")
-    if message_id:
+    msg_ids = data.get("msg_ids", [])
+    for mid in msg_ids:
         try:
-            await bot.delete_message(message.chat.id, message_id)
-        except Exception:
+            await bot.delete_message(chat_id, mid)
+        except:
             pass
 
+    try:
+        await bot.delete_message(chat_id, message.message_id)
+    except:
+        pass
+
+    await state.clear()
+
     if not await checker(bot, user_id):
-        sent = await message.answer(
-            "Чтобы пользоваться, подпишись на канал",
+        sent = await reply_and_store(
+            message,
+            state,
+            text="Чтобы пользоваться, подпишись на канал",
             reply_markup=sub_menu,
         )
     else:
-        sent = await message.answer(
+        sent = await reply_and_store(
+            message,
+            state,
             text="Выберите дальнейшее действие:",
             reply_markup=head_menu
         )
@@ -177,9 +209,11 @@ async def start_command(message: Message, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data == "check_button")
 @is_sub
-async def check_button(query: CallbackQuery):
+async def check_button(query: CallbackQuery, state: CallbackQuery):
     await query.answer()
-    await query.message.answer(
+    await reply_and_store(
+        query,
+        state,
         text="""
         Привет, спасибо за подписку на канал!
 Тут будет публиковаться полезная и интересная информация
@@ -199,9 +233,11 @@ async def know_button_start(query: CallbackQuery, state: FSMContext):
     await query.answer()
     await query.message.delete()
     await state.set_state(KnowPriceSG.waiting_for_query)
-    name_model_message = await bot.send_message(query.from_user.id,
-                                                "Введите название кроссовок:",
-                                                reply_markup=back_menu)
+    name_model_message = await reply_and_store(query,
+                                               state,
+                                               text="Введите название кроссовок:",
+                                               reply_markup=back_menu
+                                               )
     await state.update_data(prompt_id=name_model_message.message_id)
 
 
@@ -223,7 +259,11 @@ async def know_button_query(message: Message, state: FSMContext):
         pass
 
     q = message.text.strip().lower()
-    loading = await message.answer("Ищем указанную модель кроссовок и схожие модели…")
+    loading = await reply_and_store(
+        message,
+        state,
+        text="Ищем указанную модель кроссовок и схожие модели…"
+    )
     raw_bunt = {"muzhskie": [], "zhenskie": []}
     raw_sneaker = {"женские": [], "мужские": []}
 
@@ -317,8 +357,22 @@ async def know_button_query(message: Message, state: FSMContext):
             parts.append("")
 
     text = "\n".join(parts).strip()
-    await message.answer(text, reply_markup=know_menu, disable_web_page_preview=True)
+    await reply_and_store(
+        message,
+        state,
+        text=text,
+        reply_markup=know_menu,
+        disable_web_page_preview=True
+    )
     await state.clear()
+
+
+@dp.message()
+async def default_command(message: Message):
+    try:
+        await message.delete()
+    except:
+        pass
 
 
 @dp.callback_query(lambda c: c.data == "order_button")
@@ -397,10 +451,12 @@ def make_nav_kb(idx: int, max_idx: int) -> InlineKeyboardMarkup:
 
 
 @dp.callback_query(lambda c: c.data == "back_main")
-async def back_main_button(query: CallbackQuery):
+async def back_main_button(query: CallbackQuery, state: CallbackQuery):
     await query.answer()
     await query.message.delete()
-    await query.message.answer(
+    await reply_and_store(
+        query,
+        state,
         text="Выберите дальнейшее действие:",
         reply_markup=head_menu
     )
@@ -410,7 +466,11 @@ async def back_main_button(query: CallbackQuery):
 @is_sub
 async def news_start(query: CallbackQuery, state: FSMContext):
     await query.answer()
-    load_msg = await query.message.answer("Ищем интересные новости...")
+    load_msg = await reply_and_store(
+        query,
+        state,
+        text="Ищем интересные новости..."
+    )
     entries = await fetch_entries_last_day()
 
     try:
@@ -419,7 +479,11 @@ async def news_start(query: CallbackQuery, state: FSMContext):
         pass
 
     if not entries:
-        return await query.message.answer("За последние сутки новостей не найдено.")
+        return await reply_and_store(
+            query,
+            state,
+            text="За последние сутки новостей не найдено."
+        )
 
     await state.update_data(rss_entries=entries)
 
@@ -440,7 +504,11 @@ async def news_nav(query: CallbackQuery, callback_data: RssCb, state: FSMContext
     idx = callback_data.idx
 
     if not entries or not (0 <= idx < len(entries)):
-        return await query.message.answer("Ошибка навигации по новостям.")
+        return await reply_and_store(
+            query,
+            state,
+            text="Ошибка навигации по новостям."
+        )
 
     entry = entries[idx]
     kb = make_nav_kb(idx, len(entries) - 1)
@@ -455,7 +523,9 @@ async def close_news(query: CallbackQuery, state: FSMContext):
     await query.answer()
     await query.message.delete()
 
-    sent = await query.message.answer(
+    sent = await reply_and_store(
+        query,
+        state,
         text="Выберите дальнейшее действие:",
         reply_markup=head_menu
     )
