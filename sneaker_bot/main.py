@@ -8,6 +8,7 @@ import feedparser
 from calendar import timegm
 from typing import List, Union
 
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.state import State, StatesGroup
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -16,7 +17,7 @@ from functools import wraps
 from aiogram.filters.callback_data import CallbackData
 from aiogram import Dispatcher, Bot
 from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, BotCommand
 from aiogram.client.default import DefaultBotProperties
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
@@ -42,6 +43,14 @@ HEADERS = {
 MAX_PAGES_BUNT = int(os.getenv("MAX_PAGES_BUNT", 1))
 MAX_PAGES_SNEAK = int(os.getenv("MAX_PAGES_SNEAK", 1))
 PER_CAT = int(os.getenv("PER_CAT", 5))
+
+
+async def set_commands(bot: Bot):
+    commands = [
+        BotCommand(command="start", description="Запуск бота")
+    ]
+    await bot.set_my_commands(commands)
+
 
 sub_menu = InlineKeyboardMarkup(
     inline_keyboard=[
@@ -340,7 +349,11 @@ async def know_button_query(message: Message, state: FSMContext):
         fb = {k: await asyncio.gather(*[price_b(i) for i in v]) for k, v in raw_bunt.items()}
         fs = {k: await asyncio.gather(*[price_s(i) for i in v]) for k, v in raw_sneaker.items()}
 
-    await loading.delete()
+    try:
+        await loading.delete()
+    except TelegramBadRequest:
+        pass
+
     parts = []
     for shop, data, caps in [
         ("bunt.by", fb, {"muzhskie": "Мужские", "zhenskie": "Женские"}),
@@ -475,7 +488,7 @@ async def news_start(query: CallbackQuery, state: FSMContext):
 
     try:
         await load_msg.delete()
-    except:
+    except TelegramBadRequest:
         pass
 
     if not entries:
@@ -490,8 +503,10 @@ async def news_start(query: CallbackQuery, state: FSMContext):
     idx = 0
     entry = entries[idx]
     kb = make_nav_kb(idx, len(entries) - 1)
-    await query.message.edit_text(
-        f"<b>{entry.title}</b>\n{entry.link}",
+    await reply_and_store(
+        query,
+        state,
+        text=f"<b>{entry.title}</b>\n{entry.link}",
         reply_markup=kb
     )
 
@@ -533,6 +548,7 @@ async def close_news(query: CallbackQuery, state: FSMContext):
 
 
 async def main():
+    await set_commands(bot)
     await dp.start_polling(bot, skip_updates=False)
 
 
