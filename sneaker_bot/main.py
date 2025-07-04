@@ -358,21 +358,40 @@ async def know_button_query(message: Message, state: FSMContext):
         pass
 
     parts = []
-    for shop, data, caps in [
+    shops = [
         ("bunt.by", fb, {"muzhskie": "Мужские", "zhenskie": "Женские"}),
         ("sneakers.by", fs, {"мужские": "Мужские", "женские": "Женские"})
-    ]:
-        parts.append(f"<b>Магазин:</b> {shop}")
+    ]
+
+    for shop_name, data_dict, caps in shops:
+        total_found = sum(len(data_dict.get(k, [])) for k in data_dict)
+
+        if total_found == 0:
+            parts.append(f"<b>Магазин:</b> {shop_name}")
+            parts.append("    Товар не найден.")
+            parts.append("")
+            continue
+
+        parts.append(f"<b>Магазин:</b> {shop_name}")
         parts.append("")
-        for k, cap in caps.items():
-            blk = data.get(k, [])
-            if not blk: continue
-            parts.append(f"<b>{cap}</b>")
-            for i, (t, p, u) in enumerate(blk, 1):
-                parts.append(f"{i}. {t}\n   Цена: <code>{p}</code>\n   <a href=\"{u}\">Ссылка</a>")
+        for key, title in caps.items():
+            items = data_dict.get(key, [])
+            if not items:
+                continue
+
+            parts.append(f"<b>{title}</b>")
+            for idx, (t, price, url) in enumerate(items, start=1):
+                parts.append(
+                    f"{idx}. {t}\n"
+                    f"   Цена: <code>{price}</code>\n"
+                    f"   <a href=\"{url}\">Ссылка</a>"
+                )
             parts.append("")
 
+        parts.append("")
+
     text = "\n".join(parts).strip()
+
     await reply_and_store(
         message,
         state,
@@ -520,6 +539,7 @@ async def process_news_flow(query: CallbackQuery, state: FSMContext):
 @is_sub
 async def news_start(query: CallbackQuery, state: FSMContext):
     await query.answer()
+    await query.message.delete()
 
     user_id = query.from_user.id
 
