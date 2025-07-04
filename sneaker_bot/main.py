@@ -44,6 +44,8 @@ MAX_PAGES_BUNT = int(os.getenv("MAX_PAGES_BUNT", 1))
 MAX_PAGES_SNEAK = int(os.getenv("MAX_PAGES_SNEAK", 1))
 PER_CAT = int(os.getenv("PER_CAT", 5))
 
+tasks: dict[int, asyncio.Task] = {}
+
 
 async def set_commands(bot: Bot):
     commands = [
@@ -138,11 +140,9 @@ def is_sub(func):
 
         if query:
             user_id = query.from_user.id
-            chat_id = query.message.chat.id
 
         elif msg:
             user_id = msg.from_user.id
-            chat_id = msg.chat.id
 
         else:
             return await func(*args, **kwargs)
@@ -182,6 +182,9 @@ async def reply_and_store(
 async def start_command(message: Message, state: FSMContext):
     user_id = message.from_user.id
     chat_id = message.chat.id
+
+    if task := tasks.pop(user_id, None):
+        task.cancel()
 
     data = await state.get_data()
     msg_ids = data.get("msg_ids", [])
@@ -475,40 +478,56 @@ async def back_main_button(query: CallbackQuery, state: CallbackQuery):
     )
 
 
+async def process_news_flow(query: CallbackQuery, state: FSMContext):
+    chat_id = query.from_user.id
+    try:
+        load_msg = await reply_and_store(
+            query, state,
+            text="Ищем интересные новости..."
+        )
+
+        entries = await fetch_entries_last_day()
+
+        try:
+            await load_msg.delete()
+        except TelegramBadRequest:
+            pass
+
+        if not entries:
+            await reply_and_store(
+                query, state,
+                text="За последние сутки новостей не найдено."
+            )
+            return
+
+        await state.update_data(rss_entries=entries, rss_index=0)
+        entry = entries[0]
+        kb = make_nav_kb(0, len(entries) - 1)
+        await reply_and_store(
+            query, state,
+            text=f"<b>{entry.title}</b>\n{entry.link}",
+            reply_markup=kb
+        )
+
+    except asyncio.CancelledError:
+        return
+
+    finally:
+        tasks.pop(chat_id, None)
+
+
 @dp.callback_query(lambda c: c.data == "news_button")
 @is_sub
 async def news_start(query: CallbackQuery, state: FSMContext):
     await query.answer()
-    load_msg = await reply_and_store(
-        query,
-        state,
-        text="Ищем интересные новости..."
-    )
-    entries = await fetch_entries_last_day()
 
-    try:
-        await load_msg.delete()
-    except TelegramBadRequest:
-        pass
+    user_id = query.from_user.id
 
-    if not entries:
-        return await reply_and_store(
-            query,
-            state,
-            text="За последние сутки новостей не найдено."
-        )
+    if prev := tasks.get(user_id):
+        prev.cancel()
 
-    await state.update_data(rss_entries=entries)
-
-    idx = 0
-    entry = entries[idx]
-    kb = make_nav_kb(idx, len(entries) - 1)
-    await reply_and_store(
-        query,
-        state,
-        text=f"<b>{entry.title}</b>\n{entry.link}",
-        reply_markup=kb
-    )
+    task = asyncio.create_task(process_news_flow(query, state))
+    tasks[user_id] = task
 
 
 @dp.callback_query(RssCb.filter())
