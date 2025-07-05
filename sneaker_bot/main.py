@@ -252,7 +252,8 @@ async def know_button_start(query: CallbackQuery, state: FSMContext):
     await state.set_state(KnowPriceSG.waiting_for_query)
 
     prompt = await reply_and_store(
-        query, state,
+        query,
+        state,
         text="Введите название кроссовок:",
         reply_markup=back_menu
     )
@@ -421,12 +422,19 @@ async def process_price_search(
 @dp.message(KnowPriceSG.waiting_for_query)
 @is_sub
 async def know_button_query(message: Message, state: FSMContext):
-    await state.clear()
-
     data = await state.get_data()
 
     q = message.text.strip().lower()
     user_id = message.from_user.id
+    prompt_id = data.get("prompt_id")
+
+    if prompt_id:
+        try:
+            await bot.delete_message(message.chat.id, prompt_id)
+        except TelegramBadRequest:
+            pass
+
+    await state.clear()
 
     if prev := tasks.get(user_id):
         prev.cancel()
