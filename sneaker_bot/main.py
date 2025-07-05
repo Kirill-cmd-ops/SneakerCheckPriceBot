@@ -194,11 +194,6 @@ async def start_command(message: Message, state: FSMContext):
         except:
             pass
 
-    try:
-        await bot.delete_message(chat_id, message.message_id)
-    except:
-        pass
-
     await state.clear()
 
     if not await checker(bot, user_id):
@@ -215,6 +210,11 @@ async def start_command(message: Message, state: FSMContext):
             text="Выберите дальнейшее действие:",
             reply_markup=head_menu
         )
+
+    try:
+        await bot.delete_message(chat_id, message.message_id)
+    except:
+        pass
 
     await state.update_data(menu_msg_id=sent.message_id)
 
@@ -243,7 +243,6 @@ class KnowPriceSG(StatesGroup):
 @is_sub
 async def know_button_start(query: CallbackQuery, state: FSMContext):
     await query.answer()
-    await query.message.delete()
 
     user_id = query.from_user.id
     if prev := tasks.get(user_id):
@@ -256,6 +255,8 @@ async def know_button_start(query: CallbackQuery, state: FSMContext):
         text="Введите название кроссовок:",
         reply_markup=back_menu
     )
+    await query.message.delete()
+
     await state.update_data(prompt_id=prompt.message_id)
 
 
@@ -396,11 +397,6 @@ async def process_price_search(
                 for k, v in raw_sneaker.items()
             }
 
-        try:
-            await load_msg.delete()
-        except TelegramBadRequest:
-            pass
-
         text = build_result_text(fb, fs)
 
         await reply_and_store(
@@ -409,6 +405,10 @@ async def process_price_search(
             reply_markup=know_menu,
             disable_web_page_preview=True
         )
+        try:
+            await load_msg.delete()
+        except TelegramBadRequest:
+            pass
 
     except asyncio.CancelledError:
         return
@@ -421,16 +421,6 @@ async def process_price_search(
 @is_sub
 async def know_button_query(message: Message, state: FSMContext):
     data = await state.get_data()
-    if prompt := data.get("prompt_id"):
-        try:
-            await bot.delete_message(message.chat.id, prompt)
-        except:
-            pass
-
-    try:
-        await message.delete()
-    except:
-        pass
 
     q = message.text.strip().lower()
     user_id = message.from_user.id
@@ -442,6 +432,17 @@ async def know_button_query(message: Message, state: FSMContext):
         process_price_search(user_id, message, state, q)
     )
     tasks[user_id] = task
+
+    if prompt := data.get("prompt_id"):
+        try:
+            await bot.delete_message(message.chat.id, prompt)
+        except:
+            pass
+
+    try:
+        await message.delete()
+    except:
+        pass
 
 
 @dp.message()
@@ -530,13 +531,14 @@ def make_nav_kb(idx: int, max_idx: int) -> InlineKeyboardMarkup:
 @dp.callback_query(lambda c: c.data == "back_main")
 async def back_main_button(query: CallbackQuery, state: CallbackQuery):
     await query.answer()
-    await query.message.delete()
     await reply_and_store(
         query,
         state,
         text="Выберите дальнейшее действие:",
         reply_markup=head_menu
     )
+
+    await query.message.delete()
 
 
 async def process_news_flow(query: CallbackQuery, state: FSMContext):
@@ -581,14 +583,25 @@ async def process_news_flow(query: CallbackQuery, state: FSMContext):
 @is_sub
 async def news_start(query: CallbackQuery, state: FSMContext):
     await query.answer()
-    await query.message.delete()
 
     user_id = query.from_user.id
 
     if prev := tasks.get(user_id):
         prev.cancel()
 
-    task = asyncio.create_task(process_news_flow(query, state))
+    menu_msg = query.message
+
+    async def runner():
+        try:
+            await process_news_flow(query, state)
+        finally:
+            try:
+                await menu_msg.delete()
+            except TelegramBadRequest:
+                pass
+            tasks.pop(user_id, None)
+
+    task = asyncio.create_task(runner())
     tasks[user_id] = task
 
 
@@ -617,7 +630,6 @@ async def news_nav(query: CallbackQuery, callback_data: RssCb, state: FSMContext
 @dp.callback_query(lambda c: c.data == "close_news")
 async def close_news(query: CallbackQuery, state: FSMContext):
     await query.answer()
-    await query.message.delete()
 
     sent = await reply_and_store(
         query,
@@ -626,6 +638,7 @@ async def close_news(query: CallbackQuery, state: FSMContext):
         reply_markup=head_menu
     )
     await state.update_data(menu_msg_id=sent.message_id)
+    await query.message.delete()
 
 
 async def main():
