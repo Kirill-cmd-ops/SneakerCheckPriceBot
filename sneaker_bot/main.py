@@ -244,119 +244,22 @@ class KnowPriceSG(StatesGroup):
 async def know_button_start(query: CallbackQuery, state: FSMContext):
     await query.answer()
     await query.message.delete()
+
+    user_id = query.from_user.id
+    if prev := tasks.get(user_id):
+        prev.cancel()
+
     await state.set_state(KnowPriceSG.waiting_for_query)
-    name_model_message = await reply_and_store(query,
-                                               state,
-                                               text="Введите название кроссовок:",
-                                               reply_markup=back_menu
-                                               )
-    await state.update_data(prompt_id=name_model_message.message_id)
 
-
-@dp.message(KnowPriceSG.waiting_for_query)
-@is_sub
-async def know_button_query(message: Message, state: FSMContext):
-    data = await state.get_data()
-    message_id = data.get("prompt_id")
-
-    if message_id:
-        try:
-            await bot.delete_message(chat_id=message.chat.id, message_id=message_id)
-        except:
-            pass
-
-    try:
-        await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
-    except:
-        pass
-
-    q = message.text.strip().lower()
-    loading = await reply_and_store(
-        message,
-        state,
-        text="Ищем указанную модель кроссовок и схожие модели…"
+    prompt = await reply_and_store(
+        query, state,
+        text="Введите название кроссовок:",
+        reply_markup=back_menu
     )
-    raw_bunt = {"muzhskie": [], "zhenskie": []}
-    raw_sneaker = {"женские": [], "мужские": []}
+    await state.update_data(prompt_id=prompt.message_id)
 
-    async with aiohttp.ClientSession(headers=HEADERS) as s:
-        # bunt.by
-        for url in CATALOGS:
-            key = "muzhskie" if "muzhskie" in url else "zhenskie"
-            r = await s.get(url + "/")
-            if r.status != 200: continue
-            soup = BeautifulSoup(await r.text(), "lxml")
-            nxt = soup.select_one('a.pagination__link[href*="/page/1/"]')
-            sid = ""
-            if nxt:
-                pr = urlparse(nxt["href"])
-                sid = parse_qs(pr.query).get("srsltid", [""])[0]
 
-            def parse1(sp):
-                for a in sp.select("a.product-title-link"):
-                    t = a.get_text(strip=True)
-                    if q in t.lower():
-                        h = a["href"]
-                        full = h if h.startswith("http") else BASE + h
-                        raw_bunt[key].append((t, full))
-                        if len(raw_bunt[key]) >= PER_CAT: return True
-                return False
-
-            done = parse1(soup)
-            for p in range(2, MAX_PAGES_BUNT + 1):
-                if done or len(raw_bunt[key]) >= PER_CAT: break
-                u = f"{url}/page/{p}/"
-                if sid: u += f"?srsltid={sid}"
-                rr = await s.get(u)
-                if rr.status != 200: break
-                done = parse1(BeautifulSoup(await rr.text(), "lxml"))
-
-        # sneakers.by
-        for kind, base in SNEAKERS.items():
-            for p in range(1, MAX_PAGES_SNEAK + 1):
-                if len(raw_sneaker[kind]) >= PER_CAT: break
-                u = f"{base}?page={p}"
-                r = await s.get(u)
-                if r.status != 200: break
-                sp = BeautifulSoup(await r.text(), "lxml")
-                for a in sp.select("a[href*='/katalog/obuv-belarus/']:not(.pagination__link)"):
-                    t = a.get_text(strip=True)
-                    if q in t.lower():
-                        h = a["href"]
-                        full = h if h.startswith("http") else a.base_url + h
-                        raw_sneaker[kind].append((t, full))
-                        if len(raw_sneaker[kind]) >= PER_CAT: break
-
-        async def price_b(item):
-            t, u = item
-            try:
-                r = await s.get(u);
-                r.raise_for_status()
-                ds = BeautifulSoup(await r.text(), "lxml")
-                pe = ds.select_one("div.product_after_shop_loop_price span.price")
-                return t, pe.get_text(" ", strip=True) if pe else "—", u
-            except:
-                return t, "ошибка", u
-
-        async def price_s(item):
-            t, u = item
-            try:
-                r = await s.get(u);
-                r.raise_for_status()
-                ds = BeautifulSoup(await r.text(), "lxml")
-                pe = ds.select_one("p.price")
-                return t, pe.get_text(" ", strip=True) if pe else "—", u
-            except:
-                return t, "ошибка", u
-
-        fb = {k: await asyncio.gather(*[price_b(i) for i in v]) for k, v in raw_bunt.items()}
-        fs = {k: await asyncio.gather(*[price_s(i) for i in v]) for k, v in raw_sneaker.items()}
-
-    try:
-        await loading.delete()
-    except TelegramBadRequest:
-        pass
-
+def build_result_text(fb: dict, fs: dict) -> str:
     parts = []
     shops = [
         ("bunt.by", fb, {"muzhskie": "Мужские", "zhenskie": "Женские"}),
@@ -368,7 +271,7 @@ async def know_button_query(message: Message, state: FSMContext):
 
         if total_found == 0:
             parts.append(f"<b>Магазин:</b> {shop_name}")
-            parts.append("    Товар не найден.")
+            parts.append("— Товар не найден.")
             parts.append("")
             continue
 
@@ -390,16 +293,155 @@ async def know_button_query(message: Message, state: FSMContext):
 
         parts.append("")
 
-    text = "\n".join(parts).strip()
+    return "\n".join(parts).strip()
 
-    await reply_and_store(
-        message,
-        state,
-        text=text,
-        reply_markup=know_menu,
-        disable_web_page_preview=True
+
+async def process_price_search(
+        user_id: int,
+        query_ctx: CallbackQuery,
+        state: FSMContext,
+        q: str
+):
+    try:
+        load_msg = await reply_and_store(
+            query_ctx, state,
+            text="Ищем указанную модель кроссовок и схожие модели…"
+        )
+
+        raw_bunt = {"muzhskie": [], "zhenskie": []}
+        raw_sneaker = {"женские": [], "мужские": []}
+
+        async with aiohttp.ClientSession(headers=HEADERS) as session:
+            # bunt.by
+            for url in CATALOGS:
+                key = "muzhskie" if "muzhskie" in url else "zhenskie"
+                r = await session.get(url + "/")
+                if r.status != 200:
+                    continue
+                soup = BeautifulSoup(await r.text(), "lxml")
+                nxt = soup.select_one('a.pagination__link[href*="/page/1/"]')
+                sid = ""
+                if nxt:
+                    pr = urlparse(nxt["href"])
+                    sid = parse_qs(pr.query).get("srsltid", [""])[0]
+
+                def parse1(sp):
+                    for a in sp.select("a.product-title-link"):
+                        t = a.get_text(strip=True)
+                        if q in t.lower():
+                            h = a["href"]
+                            full = h if h.startswith("http") else BASE + h
+                            raw_bunt[key].append((t, full))
+                            if len(raw_bunt[key]) >= PER_CAT:
+                                return True
+                    return False
+
+                done = parse1(soup)
+                for p in range(2, MAX_PAGES_BUNT + 1):
+                    if done or len(raw_bunt[key]) >= PER_CAT:
+                        break
+                    u = f"{url}/page/{p}/" + (f"?srsltid={sid}" if sid else "")
+                    rr = await session.get(u)
+                    if rr.status != 200:
+                        break
+                    done = parse1(BeautifulSoup(await rr.text(), "lxml"))
+
+            # sneakers.by
+            for kind, base in SNEAKERS.items():
+                for p in range(1, MAX_PAGES_SNEAK + 1):
+                    if len(raw_sneaker[kind]) >= PER_CAT:
+                        break
+                    u = f"{base}?page={p}"
+                    r = await session.get(u)
+                    if r.status != 200:
+                        break
+                    sp = BeautifulSoup(await r.text(), "lxml")
+                    for a in sp.select("a[href*='/katalog/obuv-belarus/']:not(.pagination__link)"):
+                        t = a.get_text(strip=True)
+                        if q in t.lower():
+                            h = a["href"]
+                            full = h if h.startswith("http") else a.base_url + h
+                            raw_sneaker[kind].append((t, full))
+                            if len(raw_sneaker[kind]) >= PER_CAT:
+                                break
+
+            async def price_b(item):
+                t, u = item
+                try:
+                    rr = await session.get(u)
+                    rr.raise_for_status()
+                    ds = BeautifulSoup(await rr.text(), "lxml")
+                    pe = ds.select_one("div.product_after_shop_loop_price span.price")
+                    return t, pe.get_text(" ", strip=True) if pe else "—", u
+                except:
+                    return t, "ошибка", u
+
+            async def price_s(item):
+                t, u = item
+                try:
+                    rr = await session.get(u)
+                    rr.raise_for_status()
+                    ds = BeautifulSoup(await rr.text(), "lxml")
+                    pe = ds.select_one("p.price")
+                    return t, pe.get_text(" ", strip=True) if pe else "—", u
+                except:
+                    return t, "ошибка", u
+
+            fb = {
+                k: await asyncio.gather(*[price_b(i) for i in v])
+                for k, v in raw_bunt.items()
+            }
+            fs = {
+                k: await asyncio.gather(*[price_s(i) for i in v])
+                for k, v in raw_sneaker.items()
+            }
+
+        try:
+            await load_msg.delete()
+        except TelegramBadRequest:
+            pass
+
+        text = build_result_text(fb, fs)
+
+        await reply_and_store(
+            query_ctx, state,
+            text=text,
+            reply_markup=know_menu,
+            disable_web_page_preview=True
+        )
+
+    except asyncio.CancelledError:
+        return
+
+    finally:
+        tasks.pop(user_id, None)
+
+
+@dp.message(KnowPriceSG.waiting_for_query)
+@is_sub
+async def know_button_query(message: Message, state: FSMContext):
+    data = await state.get_data()
+    if prompt := data.get("prompt_id"):
+        try:
+            await bot.delete_message(message.chat.id, prompt)
+        except:
+            pass
+
+    try:
+        await message.delete()
+    except:
+        pass
+
+    q = message.text.strip().lower()
+    user_id = message.from_user.id
+
+    if prev := tasks.get(user_id):
+        prev.cancel()
+
+    task = asyncio.create_task(
+        process_price_search(user_id, message, state, q)
     )
-    await state.clear()
+    tasks[user_id] = task
 
 
 @dp.message()
