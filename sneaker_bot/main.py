@@ -233,6 +233,7 @@ async def check_button(query: CallbackQuery, state: CallbackQuery):
         """,
         reply_markup=head_menu
     )
+    await query.message.delete()
 
 
 class KnowPriceSG(StatesGroup):
@@ -420,6 +421,8 @@ async def process_price_search(
 @dp.message(KnowPriceSG.waiting_for_query)
 @is_sub
 async def know_button_query(message: Message, state: FSMContext):
+    await state.clear()
+
     data = await state.get_data()
 
     q = message.text.strip().lower()
@@ -549,6 +552,12 @@ async def process_news_flow(query: CallbackQuery, state: FSMContext):
             text="Ищем интересные новости..."
         )
 
+        menu_msg = query.message
+        try:
+            await menu_msg.delete()
+        except TelegramBadRequest:
+            pass
+
         entries = await fetch_entries_last_day()
 
         try:
@@ -589,16 +598,10 @@ async def news_start(query: CallbackQuery, state: FSMContext):
     if prev := tasks.get(user_id):
         prev.cancel()
 
-    menu_msg = query.message
-
     async def runner():
         try:
             await process_news_flow(query, state)
         finally:
-            try:
-                await menu_msg.delete()
-            except TelegramBadRequest:
-                pass
             tasks.pop(user_id, None)
 
     task = asyncio.create_task(runner())
