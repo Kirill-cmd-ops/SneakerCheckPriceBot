@@ -2,8 +2,8 @@ from typing import Union
 
 from aiogram.types import Message, CallbackQuery
 
-from sneaker_bot.dependencies import record_and_send
 from sneaker_bot.menu.head_menu import head_menu
+from sneaker_bot.services.send_messages import record_and_send
 
 
 async def send_head_menu(

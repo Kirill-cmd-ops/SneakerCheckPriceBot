@@ -1,8 +1,8 @@
 from aiogram import Router
 from aiogram.types import CallbackQuery
 
-from sneaker_bot.dependencies import record_and_send
 from sneaker_bot.menu.head_menu import head_menu
+from sneaker_bot.services.send_messages import record_and_send
 from sneaker_bot.sub_checker import is_sub
 
 

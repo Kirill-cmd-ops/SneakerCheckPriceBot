@@ -7,8 +7,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import CallbackQuery, Message
 
-from sneaker_bot.dependencies import record_and_send
+from sneaker_bot.menu.back_menu import back_menu
 from sneaker_bot.parsers.price_parser import process_price_search
+from sneaker_bot.services.send_messages import record_and_send
 from sneaker_bot.setting import bot
 from sneaker_bot.sub_checker import is_sub
 from sneaker_bot.tasks import tasks
@@ -38,7 +39,7 @@ async def search_know_button(query: CallbackQuery, state: FSMContext):
     await state.update_data(prompt_id=prompt.message_id)
 
 
-@dp.message(KnowPriceSG.waiting_for_query)
+@router.message(KnowPriceSG.waiting_for_query)
 @is_sub
 async def know_button_query(message: Message, state: FSMContext):
     data = await state.get_data()

@@ -5,7 +5,7 @@ from aiogram import Bot
 from aiogram.types import Message, CallbackQuery
 from dotenv import load_dotenv
 
-from dependencies import bot
+from sneaker_bot.setting import bot
 
 load_dotenv()
 ID_CHANNEL = os.getenv("ID_CHANNEL")

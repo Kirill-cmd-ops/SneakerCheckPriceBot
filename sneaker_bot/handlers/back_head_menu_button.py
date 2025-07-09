@@ -1,6 +1,7 @@
 from aiogram import Router
 from aiogram.types import CallbackQuery
-from sneaker_bot.main import send_head_menu
+
+from sneaker_bot.services.send_head_menu import send_head_menu
 
 router = Router()
 
