@@ -15,6 +15,7 @@ from aiogram.fsm.context import FSMContext
 
 from sneaker_bot.parsers.news_parser import fetch_entries_last_day
 from sneaker_bot.parsers.price_parser import process_price_search
+from sneaker_bot.startup import set_commands
 from tasks import tasks
 from dependencies import record_and_send, bot, dp
 
@@ -48,13 +49,6 @@ HEADERS = {
 MAX_PAGES_BUNT = int(os.getenv("MAX_PAGES_BUNT", 1))
 MAX_PAGES_SNEAK = int(os.getenv("MAX_PAGES_SNEAK", 1))
 PER_CAT = int(os.getenv("PER_CAT", 5))
-
-
-async def set_commands(bot: "Bot"):
-    commands = [
-        BotCommand(command="start", description="Запуск бота")
-    ]
-    await bot.set_my_commands(commands)
 
 
 async def send_head_menu(
