@@ -1,11 +1,13 @@
+from aiogram import Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
-from sneaker_bot.dependencies import dp
 from sneaker_bot.main import send_head_menu
 
+router = Router()
 
-@dp.callback_query(lambda c: c.data == "close_news")
+
+@router.callback_query(lambda c: c.data == "close_news")
 async def close_news_button(query: CallbackQuery, state: FSMContext):
     await query.answer()
     sent = await send_head_menu(

@@ -3,9 +3,10 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from sneaker_bot.dependencies import dp, bot, record_and_send
+from sneaker_bot.dependencies import record_and_send
 from sneaker_bot.main import send_head_menu
 from sneaker_bot.menu.sub_menu import sub_menu
+from sneaker_bot.setting import bot
 from sneaker_bot.sub_checker import checker_sub
 from sneaker_bot.tasks import tasks
 

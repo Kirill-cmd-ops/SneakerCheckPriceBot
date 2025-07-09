@@ -1,15 +1,18 @@
 import asyncio
 
+from aiogram import Router
+
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
-from sneaker_bot.dependencies import dp
 from sneaker_bot.main import process_news_flow
 from sneaker_bot.sub_checker import is_sub
 from sneaker_bot.tasks import tasks
 
 
-@dp.callback_query(lambda c: c.data == "news_button")
+router = Router()
+
+@router.callback_query(lambda c: c.data == "news_button")
 @is_sub
 async def search_news_button(query: CallbackQuery, state: FSMContext):
     await query.answer()

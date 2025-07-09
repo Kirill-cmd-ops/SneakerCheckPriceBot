@@ -1,11 +1,14 @@
+from aiogram import Router
 from aiogram.types import CallbackQuery
 
-from sneaker_bot.dependencies import dp, record_and_send
+from sneaker_bot.dependencies import record_and_send
 from sneaker_bot.menu.head_menu import head_menu
 from sneaker_bot.sub_checker import is_sub
 
 
-@dp.callback_query(lambda c: c.data == "check_button")
+router = Router()
+
+@router.callback_query(lambda c: c.data == "check_button")
 @is_sub
 async def check_button(query: CallbackQuery, state: CallbackQuery):
     await query.answer()

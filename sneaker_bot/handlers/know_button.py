@@ -1,12 +1,15 @@
 import asyncio
 
+from aiogram import Router
+
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import CallbackQuery, Message
 
-from sneaker_bot.dependencies import dp, record_and_send, bot
+from sneaker_bot.dependencies import record_and_send
 from sneaker_bot.parsers.price_parser import process_price_search
+from sneaker_bot.setting import bot
 from sneaker_bot.sub_checker import is_sub
 from sneaker_bot.tasks import tasks
 
@@ -15,7 +18,10 @@ class KnowPriceSG(StatesGroup):
     waiting_for_query = State()
 
 
-@dp.callback_query(lambda c: c.data == "know_button")
+router = Router()
+
+
+@router.callback_query(lambda c: c.data == "know_button")
 @is_sub
 async def search_know_button(query: CallbackQuery, state: FSMContext):
     await query.answer()
