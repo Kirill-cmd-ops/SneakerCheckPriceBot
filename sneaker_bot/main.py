@@ -178,6 +178,18 @@ async def reply_and_store(
     return sent
 
 
+async def send_head_menu(
+        source: Union[Message, CallbackQuery],
+        state,
+        text):
+    return await reply_and_store(
+        source,
+        state,
+        text,
+        reply_markup=head_menu
+    )
+
+
 @dp.message(Command("start"))
 async def start_command(message: Message, state: FSMContext):
     user_id = message.from_user.id
@@ -204,11 +216,10 @@ async def start_command(message: Message, state: FSMContext):
             reply_markup=sub_menu,
         )
     else:
-        sent = await reply_and_store(
+        sent = await send_head_menu(
             message,
             state,
-            text="Выберите дальнейшее действие:",
-            reply_markup=head_menu
+            text='Выберите дальнейшее действие'
         )
 
     try:
@@ -227,11 +238,10 @@ async def check_button(query: CallbackQuery, state: CallbackQuery):
         query,
         state,
         text="""
-        Привет, спасибо за подписку на канал!
-Тут будет публиковаться полезная и интересная информация
-Выберите действие:
-        """,
-        reply_markup=head_menu
+            Привет, спасибо за подписку на канал!
+    Тут будет публиковаться полезная и интересная информация
+    Выберите действие:
+            """
     )
     await query.message.delete()
 
@@ -308,7 +318,7 @@ async def process_price_search(
     try:
         load_msg = await reply_and_store(
             query_ctx, state,
-            text="Ищем указанную модель кроссовок и схожие модели…"
+            text="Ищем указанную модель кроссовок и схожие модели…",
         )
 
         raw_bunt = {"muzhskie": [], "zhenskie": []}
@@ -542,13 +552,11 @@ def make_nav_kb(idx: int, max_idx: int) -> InlineKeyboardMarkup:
 @dp.callback_query(lambda c: c.data == "back_main")
 async def back_main_button(query: CallbackQuery, state: CallbackQuery):
     await query.answer()
-    await reply_and_store(
+    await send_head_menu(
         query,
         state,
-        text="Выберите дальнейшее действие:",
-        reply_markup=head_menu
+        text="Выберите дальнейшее действие:"
     )
-
     await query.message.delete()
 
 
@@ -568,11 +576,6 @@ async def process_news_flow(query: CallbackQuery, state: FSMContext):
 
         entries = await fetch_entries_last_day()
 
-        try:
-            await load_msg.delete()
-        except TelegramBadRequest:
-            pass
-
         if not entries:
             await reply_and_store(
                 query, state,
@@ -588,6 +591,11 @@ async def process_news_flow(query: CallbackQuery, state: FSMContext):
             text=f"<b>{entry.title}</b>\n{entry.link}",
             reply_markup=kb
         )
+
+        try:
+            await load_msg.delete()
+        except TelegramBadRequest:
+            pass
 
     except asyncio.CancelledError:
         return
@@ -641,12 +649,10 @@ async def news_nav(query: CallbackQuery, callback_data: RssCb, state: FSMContext
 @dp.callback_query(lambda c: c.data == "close_news")
 async def close_news(query: CallbackQuery, state: FSMContext):
     await query.answer()
-
-    sent = await reply_and_store(
+    sent = await send_head_menu(
         query,
         state,
         text="Выберите дальнейшее действие:",
-        reply_markup=head_menu
     )
     await state.update_data(menu_msg_id=sent.message_id)
     await query.message.delete()
