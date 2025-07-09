@@ -28,6 +28,11 @@ from sub_checker import checker_sub, is_sub
 if TYPE_CHECKING:
     from aiogram import Bot
 
+
+from handlers import router as main_router
+
+dp.include_router(main_router)
+
 load_dotenv()
 BOT_TOKEN = os.getenv("SECRET_TOKEN_BOT")
 ID_CHANNEL = os.getenv("ID_CHANNEL")
@@ -56,42 +61,6 @@ async def send_head_menu(
         state,
         text):
     return await record_and_send(source, state, text, reply_markup=head_menu)
-
-
-@dp.message(Command("start"))
-async def start_command(message: Message, state: FSMContext):
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-
-    if task := tasks.pop(user_id, None):
-        task.cancel()
-
-    data = await state.get_data()
-    msg_ids = data.get("msg_ids", [])
-    for mid in msg_ids:
-        try:
-            await bot.delete_message(chat_id, mid)
-        except:
-            pass
-
-    await state.clear()
-
-    if not await checker_sub(bot, user_id):
-        sent = await record_and_send(message, state, text="Чтобы пользоваться, подпишись на канал",
-                                     reply_markup=sub_menu)
-    else:
-        sent = await send_head_menu(
-            message,
-            state,
-            text='Выберите дальнейшее действие'
-        )
-
-    try:
-        await bot.delete_message(chat_id, message.message_id)
-    except:
-        pass
-
-    await state.update_data(menu_msg_id=sent.message_id)
 
 
 @dp.callback_query(lambda c: c.data == "check_button")
