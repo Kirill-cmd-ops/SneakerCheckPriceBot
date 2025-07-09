@@ -28,7 +28,6 @@ from sub_checker import checker_sub, is_sub
 if TYPE_CHECKING:
     from aiogram import Bot
 
-
 from handlers import router as main_router
 
 dp.include_router(main_router)
@@ -61,16 +60,6 @@ async def send_head_menu(
         state,
         text):
     return await record_and_send(source, state, text, reply_markup=head_menu)
-
-
-@dp.callback_query(lambda c: c.data == "order_button")
-@is_sub
-async def order_button(query: CallbackQuery):
-    await query.answer(
-        text="В будущем тут будет ссылка на наш сайт",
-        show_alert=True,
-    )
-    await query.answer()
 
 
 class RssCb(CallbackData, prefix="rss"):
