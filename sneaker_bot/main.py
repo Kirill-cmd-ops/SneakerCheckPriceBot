@@ -4,26 +4,19 @@ import asyncio
 from typing import Union, TYPE_CHECKING
 
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.fsm.state import State, StatesGroup
 from dotenv import load_dotenv
 
 from aiogram.filters.callback_data import CallbackData
-from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery, BotCommand
+from aiogram.types import Message, CallbackQuery
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
 
 from sneaker_bot.parsers.news_parser import fetch_entries_last_day
-from sneaker_bot.parsers.price_parser import process_price_search
 from sneaker_bot.startup import set_commands
 from tasks import tasks
 from dependencies import record_and_send, bot, dp
 
-from sneaker_bot.menu.back_menu import back_menu
-from sneaker_bot.menu.sub_menu import sub_menu
 from sneaker_bot.menu.head_menu import head_menu
-
-from sub_checker import checker_sub, is_sub
 
 if TYPE_CHECKING:
     from aiogram import Bot
@@ -123,26 +116,6 @@ async def process_news_flow(query: CallbackQuery, state: FSMContext):
 
     finally:
         tasks.pop(chat_id, None)
-
-
-@dp.callback_query(lambda c: c.data == "news_button")
-@is_sub
-async def search_news_button(query: CallbackQuery, state: FSMContext):
-    await query.answer()
-
-    user_id = query.from_user.id
-
-    if prev := tasks.get(user_id):
-        prev.cancel()
-
-    async def runner():
-        try:
-            await process_news_flow(query, state)
-        finally:
-            tasks.pop(user_id, None)
-
-    task = asyncio.create_task(runner())
-    tasks[user_id] = task
 
 
 @dp.callback_query(RssCb.filter())
