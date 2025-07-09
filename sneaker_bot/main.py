@@ -20,6 +20,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
 
+from sneaker_bot.news_parser import fetch_entries_last_day
 from sneaker_bot.price_parser import process_price_search
 from tasks import tasks
 from dependencies import record_and_send
@@ -280,42 +281,6 @@ async def order_button(query: CallbackQuery):
 
 class RssCb(CallbackData, prefix="rss"):
     idx: int
-
-
-async def fetch_rss_page(session: aiohttp.ClientSession, page: int):
-    url = NEWS_URL if page == 1 else f"{NEWS_URL}?paged={page}"
-    async with session.get(url, timeout=5) as resp:
-        if resp.status == 404:
-            return []
-        resp.raise_for_status()
-        txt = await resp.text()
-    return feedparser.parse(txt).entries
-
-
-async def fetch_entries_last_day() -> List[feedparser.FeedParserDict]:
-    cutoff_ts = time.time() - LAST_HOURS * 3600
-    recent = []
-
-    async with aiohttp.ClientSession() as session:
-        for page in range(1, MAX_PAGES + 1):
-            entries = await fetch_rss_page(session, page)
-            if not entries:
-                break
-
-            for entry in entries:
-                if not entry.get("published_parsed"):
-                    continue
-                ts = timegm(entry.published_parsed)
-                if ts >= cutoff_ts:
-                    recent.append(entry)
-                else:
-                    break
-            else:
-                await asyncio.sleep(1)
-                continue
-            break
-
-    return recent
 
 
 def make_nav_kb(idx: int, max_idx: int) -> InlineKeyboardMarkup:
