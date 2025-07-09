@@ -91,17 +91,6 @@ def make_nav_kb(idx: int, max_idx: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[buttons])
 
 
-@dp.callback_query(lambda c: c.data == "back_main")
-async def back_head_main_button(query: CallbackQuery, state: CallbackQuery):
-    await query.answer()
-    await send_head_menu(
-        query,
-        state,
-        text="Выберите дальнейшее действие:"
-    )
-    await query.message.delete()
-
-
 async def process_news_flow(query: CallbackQuery, state: FSMContext):
     chat_id = query.from_user.id
     try:
