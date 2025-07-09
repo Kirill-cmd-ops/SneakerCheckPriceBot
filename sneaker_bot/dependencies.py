@@ -1,8 +1,14 @@
 from typing import Union
+import os
 
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
+from dotenv import load_dotenv
 
+load_dotenv()
+BOT_TOKEN = os.getenv("SECRET_TOKEN_BOT")
 
 async def record_and_send(
         ctx: Union[Message, CallbackQuery],
@@ -60,3 +66,11 @@ def build_result_text(fb: dict, fs: dict) -> str:
         parts.append("")
 
     return "\n".join(parts).strip()
+
+
+bot = Bot(
+    token=BOT_TOKEN,
+    default=DefaultBotProperties(parse_mode="HTML")
+)
+
+dp = Dispatcher()

@@ -1,29 +1,31 @@
 import os
 import asyncio
 
-from typing import Union
+from typing import Union, TYPE_CHECKING
 
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.state import State, StatesGroup
 from dotenv import load_dotenv
-from functools import wraps
 
 from aiogram.filters.callback_data import CallbackData
-from aiogram import Dispatcher, Bot
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, BotCommand
-from aiogram.client.default import DefaultBotProperties
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
 
 from sneaker_bot.parsers.news_parser import fetch_entries_last_day
 from sneaker_bot.parsers.price_parser import process_price_search
 from tasks import tasks
-from dependencies import record_and_send
+from dependencies import record_and_send, bot, dp
 
 from sneaker_bot.menu.back_menu import back_menu
 from sneaker_bot.menu.sub_menu import sub_menu
 from sneaker_bot.menu.head_menu import head_menu
+
+from sub_checker import checker_sub, is_sub
+
+if TYPE_CHECKING:
+    from aiogram import Bot
 
 load_dotenv()
 BOT_TOKEN = os.getenv("SECRET_TOKEN_BOT")
@@ -48,58 +50,11 @@ MAX_PAGES_SNEAK = int(os.getenv("MAX_PAGES_SNEAK", 1))
 PER_CAT = int(os.getenv("PER_CAT", 5))
 
 
-async def set_commands(bot: Bot):
+async def set_commands(bot: "Bot"):
     commands = [
         BotCommand(command="start", description="Запуск бота")
     ]
     await bot.set_my_commands(commands)
-
-
-bot = Bot(
-    token=BOT_TOKEN,
-    default=DefaultBotProperties(parse_mode="HTML")
-)
-
-dp = Dispatcher()
-
-
-async def checker_sub(bot: Bot, user_id: int) -> bool:
-    member = await bot.get_chat_member(
-        chat_id=ID_CHANNEL,
-        user_id=user_id,
-    )
-    return member.status not in ("left", "kicked")
-
-
-def is_sub(func):
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        msg = None
-        query = None
-        for arg in args:
-            if isinstance(arg, Message):
-                msg = arg
-            elif isinstance(arg, CallbackQuery):
-                query = arg
-
-        if query:
-            user_id = query.from_user.id
-
-        elif msg:
-            user_id = msg.from_user.id
-
-        else:
-            return await func(*args, **kwargs)
-
-        if not await checker_sub(bot, user_id):
-            return await query.answer(
-                "Чтобы пользоваться, подпишись на канал",
-                show_alert=True,
-            )
-
-        return await func(*args, **kwargs)
-
-    return wrapper
 
 
 async def send_head_menu(
@@ -149,11 +104,16 @@ async def start_command(message: Message, state: FSMContext):
 @is_sub
 async def check_button(query: CallbackQuery, state: CallbackQuery):
     await query.answer()
-    await record_and_send(query, state, text="""
+    await record_and_send(
+        query,
+        state,
+        text="""
             Привет, спасибо за подписку на канал!
     Тут будет публиковаться полезная и интересная информация
     Выберите действие:
-            """)
+            """,
+        reply_markup=head_menu
+    )
     await query.message.delete()
 
 
