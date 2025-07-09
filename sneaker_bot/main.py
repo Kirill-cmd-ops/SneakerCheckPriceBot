@@ -119,7 +119,7 @@ bot = Bot(
 dp = Dispatcher()
 
 
-async def checker(bot: Bot, user_id: int) -> bool:
+async def checker_sub(bot: Bot, user_id: int) -> bool:
     member = await bot.get_chat_member(
         chat_id=ID_CHANNEL,
         user_id=user_id,
@@ -147,7 +147,7 @@ def is_sub(func):
         else:
             return await func(*args, **kwargs)
 
-        if not await checker(bot, user_id):
+        if not await checker_sub(bot, user_id):
             return await query.answer(
                 "Чтобы пользоваться, подпишись на канал",
                 show_alert=True,
@@ -158,7 +158,7 @@ def is_sub(func):
     return wrapper
 
 
-async def reply_and_store(
+async def record_and_send(
         ctx: Union[Message, CallbackQuery],
         state: FSMContext,
         text: str,
@@ -182,12 +182,7 @@ async def send_head_menu(
         source: Union[Message, CallbackQuery],
         state,
         text):
-    return await reply_and_store(
-        source,
-        state,
-        text,
-        reply_markup=head_menu
-    )
+    return await record_and_send(source, state, text, reply_markup=head_menu)
 
 
 @dp.message(Command("start"))
@@ -208,13 +203,9 @@ async def start_command(message: Message, state: FSMContext):
 
     await state.clear()
 
-    if not await checker(bot, user_id):
-        sent = await reply_and_store(
-            message,
-            state,
-            text="Чтобы пользоваться, подпишись на канал",
-            reply_markup=sub_menu,
-        )
+    if not await checker_sub(bot, user_id):
+        sent = await record_and_send(message, state, text="Чтобы пользоваться, подпишись на канал",
+                                     reply_markup=sub_menu)
     else:
         sent = await send_head_menu(
             message,
@@ -234,15 +225,11 @@ async def start_command(message: Message, state: FSMContext):
 @is_sub
 async def check_button(query: CallbackQuery, state: CallbackQuery):
     await query.answer()
-    await reply_and_store(
-        query,
-        state,
-        text="""
+    await record_and_send(query, state, text="""
             Привет, спасибо за подписку на канал!
     Тут будет публиковаться полезная и интересная информация
     Выберите действие:
-            """
-    )
+            """)
     await query.message.delete()
 
 
@@ -252,7 +239,7 @@ class KnowPriceSG(StatesGroup):
 
 @dp.callback_query(lambda c: c.data == "know_button")
 @is_sub
-async def know_button_start(query: CallbackQuery, state: FSMContext):
+async def search_know_button(query: CallbackQuery, state: FSMContext):
     await query.answer()
 
     user_id = query.from_user.id
@@ -261,12 +248,7 @@ async def know_button_start(query: CallbackQuery, state: FSMContext):
 
     await state.set_state(KnowPriceSG.waiting_for_query)
 
-    prompt = await reply_and_store(
-        query,
-        state,
-        text="Введите название кроссовок:",
-        reply_markup=back_menu
-    )
+    prompt = await record_and_send(query, state, text="Введите название кроссовок:", reply_markup=back_menu)
     await query.message.delete()
 
     await state.update_data(prompt_id=prompt.message_id)
@@ -316,10 +298,7 @@ async def process_price_search(
         q: str
 ):
     try:
-        load_msg = await reply_and_store(
-            query_ctx, state,
-            text="Ищем указанную модель кроссовок и схожие модели…",
-        )
+        load_msg = await record_and_send(query_ctx, state, text="Ищем указанную модель кроссовок и схожие модели…")
 
         raw_bunt = {"muzhskie": [], "zhenskie": []}
         raw_sneaker = {"женские": [], "мужские": []}
@@ -411,12 +390,7 @@ async def process_price_search(
 
         text = build_result_text(fb, fs)
 
-        await reply_and_store(
-            query_ctx, state,
-            text=text,
-            reply_markup=know_menu,
-            disable_web_page_preview=True
-        )
+        await record_and_send(query_ctx, state, text=text, reply_markup=know_menu, disable_web_page_preview=True)
         try:
             await load_msg.delete()
         except TelegramBadRequest:
@@ -467,7 +441,7 @@ async def know_button_query(message: Message, state: FSMContext):
 
 
 @dp.message()
-async def default_command(message: Message):
+async def default_text(message: Message):
     try:
         await message.delete()
     except:
@@ -550,7 +524,7 @@ def make_nav_kb(idx: int, max_idx: int) -> InlineKeyboardMarkup:
 
 
 @dp.callback_query(lambda c: c.data == "back_main")
-async def back_main_button(query: CallbackQuery, state: CallbackQuery):
+async def back_head_main_button(query: CallbackQuery, state: CallbackQuery):
     await query.answer()
     await send_head_menu(
         query,
@@ -563,10 +537,7 @@ async def back_main_button(query: CallbackQuery, state: CallbackQuery):
 async def process_news_flow(query: CallbackQuery, state: FSMContext):
     chat_id = query.from_user.id
     try:
-        load_msg = await reply_and_store(
-            query, state,
-            text="Ищем интересные новости..."
-        )
+        load_msg = await record_and_send(query, state, text="Ищем интересные новости...")
 
         menu_msg = query.message
         try:
@@ -577,20 +548,13 @@ async def process_news_flow(query: CallbackQuery, state: FSMContext):
         entries = await fetch_entries_last_day()
 
         if not entries:
-            await reply_and_store(
-                query, state,
-                text="За последние сутки новостей не найдено."
-            )
+            await record_and_send(query, state, text="За последние сутки новостей не найдено.")
             return
 
         await state.update_data(rss_entries=entries, rss_index=0)
         entry = entries[0]
         kb = make_nav_kb(0, len(entries) - 1)
-        await reply_and_store(
-            query, state,
-            text=f"<b>{entry.title}</b>\n{entry.link}",
-            reply_markup=kb
-        )
+        await record_and_send(query, state, text=f"<b>{entry.title}</b>\n{entry.link}", reply_markup=kb)
 
         try:
             await load_msg.delete()
@@ -606,7 +570,7 @@ async def process_news_flow(query: CallbackQuery, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data == "news_button")
 @is_sub
-async def news_start(query: CallbackQuery, state: FSMContext):
+async def search_news_button(query: CallbackQuery, state: FSMContext):
     await query.answer()
 
     user_id = query.from_user.id
@@ -632,11 +596,7 @@ async def news_nav(query: CallbackQuery, callback_data: RssCb, state: FSMContext
     idx = callback_data.idx
 
     if not entries or not (0 <= idx < len(entries)):
-        return await reply_and_store(
-            query,
-            state,
-            text="Ошибка навигации по новостям."
-        )
+        return await record_and_send(query, state, text="Ошибка навигации по новостям.")
 
     entry = entries[idx]
     kb = make_nav_kb(idx, len(entries) - 1)
@@ -647,7 +607,7 @@ async def news_nav(query: CallbackQuery, callback_data: RssCb, state: FSMContext
 
 
 @dp.callback_query(lambda c: c.data == "close_news")
-async def close_news(query: CallbackQuery, state: FSMContext):
+async def close_news_button(query: CallbackQuery, state: FSMContext):
     await query.answer()
     sent = await send_head_menu(
         query,
