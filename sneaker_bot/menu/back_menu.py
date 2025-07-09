@@ -10,5 +10,3 @@ back_menu = InlineKeyboardMarkup(
         ]
     ]
 )
-
-know_menu = back_menu

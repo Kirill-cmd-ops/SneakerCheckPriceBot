@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 from tasks import tasks
 from dependencies import record_and_send, build_result_text
-from back_menu import know_menu
+from sneaker_bot.menu.know_menu import know_menu
 
 
 load_dotenv()

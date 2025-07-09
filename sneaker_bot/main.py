@@ -1,11 +1,7 @@
 import os
-import time
 import asyncio
 
-import aiohttp
-import feedparser
-from calendar import timegm
-from typing import List, Union
+from typing import Union
 
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.state import State, StatesGroup
@@ -20,11 +16,11 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
 
-from sneaker_bot.news_parser import fetch_entries_last_day
-from sneaker_bot.price_parser import process_price_search
+from sneaker_bot.parsers.news_parser import fetch_entries_last_day
+from sneaker_bot.parsers.price_parser import process_price_search
 from tasks import tasks
 from dependencies import record_and_send
-from back_menu import back_menu
+from sneaker_bot.menu.back_menu import back_menu
 
 
 load_dotenv()
