@@ -63,14 +63,6 @@ async def send_head_menu(
     return await record_and_send(source, state, text, reply_markup=head_menu)
 
 
-@dp.message()
-async def default_text(message: Message):
-    try:
-        await message.delete()
-    except:
-        pass
-
-
 @dp.callback_query(lambda c: c.data == "order_button")
 @is_sub
 async def order_button(query: CallbackQuery):
