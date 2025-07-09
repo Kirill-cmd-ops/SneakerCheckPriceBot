@@ -11,10 +11,11 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
 
+from sneaker_bot.dependencies import record_and_send
 from sneaker_bot.parsers.news_parser import fetch_entries_last_day
+from sneaker_bot.setting import bot, dp
 from sneaker_bot.startup import set_commands
 from tasks import tasks
-from dependencies import record_and_send, bot, dp
 
 from sneaker_bot.menu.head_menu import head_menu
 
@@ -46,13 +47,6 @@ HEADERS = {
 MAX_PAGES_BUNT = int(os.getenv("MAX_PAGES_BUNT", 1))
 MAX_PAGES_SNEAK = int(os.getenv("MAX_PAGES_SNEAK", 1))
 PER_CAT = int(os.getenv("PER_CAT", 5))
-
-
-async def send_head_menu(
-        source: Union[Message, CallbackQuery],
-        state,
-        text):
-    return await record_and_send(source, state, text, reply_markup=head_menu)
 
 
 class RssCb(CallbackData, prefix="rss"):
