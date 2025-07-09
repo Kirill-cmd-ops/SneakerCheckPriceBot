@@ -20,8 +20,10 @@ from sneaker_bot.parsers.news_parser import fetch_entries_last_day
 from sneaker_bot.parsers.price_parser import process_price_search
 from tasks import tasks
 from dependencies import record_and_send
-from sneaker_bot.menu.back_menu import back_menu
 
+from sneaker_bot.menu.back_menu import back_menu
+from sneaker_bot.menu.sub_menu import sub_menu
+from sneaker_bot.menu.head_menu import head_menu
 
 load_dotenv()
 BOT_TOKEN = os.getenv("SECRET_TOKEN_BOT")
@@ -52,50 +54,6 @@ async def set_commands(bot: Bot):
     ]
     await bot.set_my_commands(commands)
 
-
-sub_menu = InlineKeyboardMarkup(
-    inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="Подписаться на канал",
-                url="https://t.me/SneakerPriceCheck"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="Проверить",
-                callback_data="check_button"
-            )
-        ]
-    ]
-)
-
-head_menu = InlineKeyboardMarkup(
-    inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="Узнать цены",
-                callback_data="know_button"
-            ),
-            InlineKeyboardButton(
-                text="Новости",
-                callback_data="news_button"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="Заказать кроссовки",
-                callback_data="order_button"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="Помощь",
-                url="tg://resolve?domain=SkForbes"
-            )
-        ],
-    ]
-)
 
 bot = Bot(
     token=BOT_TOKEN,
