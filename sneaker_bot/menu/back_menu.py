@@ -4,7 +4,7 @@ back_menu = InlineKeyboardMarkup(
     inline_keyboard=[
         [
             InlineKeyboardButton(
-                text="Назад",
+                text="🚪Назад🚪",
                 callback_data="back_main"
             )
         ]

@@ -12,6 +12,6 @@ async def back_head_menu_button(query: CallbackQuery, state: CallbackQuery):
     await send_head_menu(
         query,
         state,
-        text="Выберите дальнейшее действие:"
+        text="📩Выберите дальнейшее действие:📩"
     )
     await query.message.delete()

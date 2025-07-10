@@ -59,7 +59,7 @@ async def close_news_button(query: CallbackQuery, state: FSMContext):
     sent = await send_head_menu(
         query,
         state,
-        text="Выберите дальнейшее действие:",
+        text="📩Выберите дальнейшее действие:📩",
     )
     await state.update_data(menu_msg_id=sent.message_id)
     await query.message.delete()

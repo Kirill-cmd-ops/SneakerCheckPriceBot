@@ -11,7 +11,7 @@ router = Router()
 @is_sub
 async def order_button(query: CallbackQuery):
     await query.answer(
-        text="В будущем тут будет ссылка на наш сайт",
+        text="😇В будущем тут будет ссылка на наш сайт😇",
         show_alert=True,
     )
     await query.answer()

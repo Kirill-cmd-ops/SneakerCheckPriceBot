@@ -33,7 +33,7 @@ async def search_know_button(query: CallbackQuery, state: FSMContext):
 
     await state.set_state(KnowPriceSG.waiting_for_query)
 
-    prompt = await record_and_send(query, state, text="Введите название кроссовок:", reply_markup=back_menu)
+    prompt = await record_and_send(query, state, text="👇Введите название кроссовок:👇", reply_markup=back_menu)
     await query.message.delete()
 
     await state.update_data(prompt_id=prompt.message_id)

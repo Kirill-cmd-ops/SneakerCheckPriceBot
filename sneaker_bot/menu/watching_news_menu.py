@@ -17,7 +17,7 @@ def make_nav_kb(idx: int, max_idx: int) -> InlineKeyboardMarkup:
         )
     buttons.append(
         InlineKeyboardButton(
-            text="Закрыть",
+            text="❎Закрыть❎",
             callback_data="close_news"
         )
     )

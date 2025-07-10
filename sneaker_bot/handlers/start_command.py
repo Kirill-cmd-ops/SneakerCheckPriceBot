@@ -32,13 +32,13 @@ async def start_command(message: Message, state: FSMContext):
     await state.clear()
 
     if not await checker_sub(bot, user_id):
-        sent = await record_and_send(message, state, text="Чтобы пользоваться, подпишись на канал",
+        sent = await record_and_send(message, state, text="👻Чтобы пользоваться, подпишись на канал👻",
                                      reply_markup=sub_menu)
     else:
         sent = await send_head_menu(
             message,
             state,
-            text='Выберите дальнейшее действие'
+            text='📩Выберите дальнейшее действие📩'
         )
 
     try:
