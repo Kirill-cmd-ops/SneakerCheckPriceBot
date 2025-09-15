@@ -3,7 +3,7 @@ import asyncio
 from sneaker_bot.setting import bot, dp
 from sneaker_bot.startup import set_commands
 
-from handlers import router as main_router
+from sneaker_bot.handlers import router as main_router
 
 dp.include_router(main_router)
 
