@@ -10,6 +10,8 @@ python = "^3.12"
 aiogram = "^3.20.0.post0"
 python-dotenv = "^1.1.1"
 feedparser = "^6.0.11"
+bs4 = "^0.0.2"
+lxml = "^6.0.1"
 
 
 [build-system]
