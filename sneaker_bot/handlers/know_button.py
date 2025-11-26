@@ -14,7 +14,9 @@ from sneaker_bot.tasks import tasks
 
 
 class KnowPriceSG(StatesGroup):
-    waiting_for_query = State()
+    waiting_for_brand = State()
+    waiting_for_model = State()
+    waiting_for_size = State()
 
 
 router = Router()
@@ -33,9 +35,14 @@ async def search_know_button(query: CallbackQuery, state: FSMContext):
     if prev := tasks.get(user_id):
         prev.cancel()
 
-    await state.set_state(KnowPriceSG.waiting_for_query)
+    await state.set_state(KnowPriceSG.waiting_for_brand)
 
-    prompt = await record_and_send(query, state, text="👇Введите название кроссовок:👇", reply_markup=back_menu)
+    prompt = await record_and_send(
+        query,
+        state,
+        text="👇Введите бренд кроссовок (например, Adidas, Nike):👇",
+        reply_markup=back_menu
+    )
 
     try:
         await query.message.delete()
@@ -45,37 +52,78 @@ async def search_know_button(query: CallbackQuery, state: FSMContext):
     await state.update_data(prompt_id=prompt.message_id)
 
 
-@router.message(KnowPriceSG.waiting_for_query)
+@router.message(KnowPriceSG.waiting_for_brand)
 @is_sub
-async def know_button_query(message: Message, state: FSMContext):
+async def know_button_brand(message: Message, state: FSMContext):
+    brand = message.text.strip().lower()
+    await state.update_data(brand=brand)
+
+    try:
+        await message.delete()
+    except TelegramBadRequest:
+        pass
+
+    await state.set_state(KnowPriceSG.waiting_for_model)
+    await record_and_send(
+        message,
+        state,
+        text="👇Введите название модели (например, Superstar, Air Max).\n"
+             "Или напишите 'Посмотреть все', чтобы показать все модели бренда:👇",
+        reply_markup=back_menu
+    )
+
+
+@router.message(KnowPriceSG.waiting_for_model)
+@is_sub
+async def know_button_model(message: Message, state: FSMContext):
+    model = message.text.strip().lower()
+
+    if model == "посмотреть все":
+        await state.update_data(model="")  # пустая модель
+    else:
+        await state.update_data(model=model)
+
+    try:
+        await message.delete()
+    except TelegramBadRequest:
+        pass
+
+    await state.set_state(KnowPriceSG.waiting_for_size)
+    await record_and_send(
+        message,
+        state,
+        text="👇Введите размер (например, 42). Если не важно — напишите 'нет':👇",
+        reply_markup=back_menu
+    )
+
+
+@router.message(KnowPriceSG.waiting_for_size)
+@is_sub
+async def know_button_size(message: Message, state: FSMContext):
+    size = message.text.strip().lower()
     data = await state.get_data()
 
-    q = message.text.strip().lower()
+    brand = data.get("brand", "")
+    model = data.get("model", "")
     user_id = message.from_user.id
-    prompt_id = data.get("prompt_id")
 
-    if prompt_id:
-        try:
-            await bot.delete_message(message.chat.id, prompt_id)
-        except TelegramBadRequest:
-            pass
+    # формируем запрос: бренд + модель + размер (если указан)
+    q = brand
+    if model:
+        q += f" {model}"
+    if size != "нет":
+        q += f" {size}"
 
     await state.clear()
 
     if prev := tasks.get(user_id):
         prev.cancel()
 
-    # запускаем поиск в фоне, чтобы не блокировать обработчик
+    # запускаем поиск в фоне
     task = asyncio.create_task(
         process_price_search(user_id, message, state, q)
     )
     tasks[user_id] = task
-
-    if prompt := data.get("prompt_id"):
-        try:
-            await bot.delete_message(message.chat.id, prompt)
-        except TelegramBadRequest:
-            pass
 
     try:
         await message.delete()
