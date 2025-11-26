@@ -1,7 +1,5 @@
 import asyncio
-
 from aiogram import Router
-
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
@@ -25,7 +23,11 @@ router = Router()
 @router.callback_query(lambda c: c.data == "know_button")
 @is_sub
 async def search_know_button(query: CallbackQuery, state: FSMContext):
-    await query.answer()
+    # подтверждаем нажатие сразу
+    try:
+        await query.answer(cache_time=2)
+    except TelegramBadRequest:
+        pass
 
     user_id = query.from_user.id
     if prev := tasks.get(user_id):
@@ -34,7 +36,11 @@ async def search_know_button(query: CallbackQuery, state: FSMContext):
     await state.set_state(KnowPriceSG.waiting_for_query)
 
     prompt = await record_and_send(query, state, text="👇Введите название кроссовок:👇", reply_markup=back_menu)
-    await query.message.delete()
+
+    try:
+        await query.message.delete()
+    except TelegramBadRequest:
+        pass
 
     await state.update_data(prompt_id=prompt.message_id)
 
@@ -59,6 +65,7 @@ async def know_button_query(message: Message, state: FSMContext):
     if prev := tasks.get(user_id):
         prev.cancel()
 
+    # запускаем поиск в фоне, чтобы не блокировать обработчик
     task = asyncio.create_task(
         process_price_search(user_id, message, state, q)
     )
@@ -67,10 +74,10 @@ async def know_button_query(message: Message, state: FSMContext):
     if prompt := data.get("prompt_id"):
         try:
             await bot.delete_message(message.chat.id, prompt)
-        except:
+        except TelegramBadRequest:
             pass
 
     try:
         await message.delete()
-    except:
+    except TelegramBadRequest:
         pass

@@ -5,6 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
 import os
+import re
 import aiohttp
 import asyncio
 from bs4 import BeautifulSoup
@@ -32,6 +33,43 @@ SNEAKERS = {
 }
 MAX_PAGES_BUNT = int(os.getenv("MAX_PAGES_BUNT", 1))
 MAX_PAGES_SNEAK = int(os.getenv("MAX_PAGES_SNEAK", 1))
+
+
+def normalize_price(text: str) -> str:
+    if not text:
+        return "—"
+    m = re.search(r"(\d[\d\s.,]+)\s*(BYN|₽|RUB|USD|€)?", text, flags=re.IGNORECASE)
+    if not m:
+        return "—"
+    amount = m.group(1).replace(",", ".").strip()
+    currency = (m.group(2) or "").upper().replace("RUB", "₽")
+    return f"{amount} {currency}".strip()
+
+
+def extract_price(ds: BeautifulSoup) -> str:
+    selectors = [
+        "p.price",
+        "span.price",
+        "div.price",
+        "div.product-price",
+        "span.woocommerce-Price-amount",
+        "ins .woocommerce-Price-amount",
+        "meta[itemprop='price']",
+        "[data-price]",
+    ]
+    for sel in selectors:
+        el = ds.select_one(sel)
+        if not el:
+            continue
+        if el.name == "meta":
+            return normalize_price(el.get("content", "").strip())
+        if el.has_attr("data-price"):
+            return normalize_price(el["data-price"])
+        txt = el.get_text(" ", strip=True)
+        price = normalize_price(txt)
+        if price != "—":
+            return price
+    return normalize_price(ds.get_text(" ", strip=True))
 
 
 async def process_price_search(
@@ -106,8 +144,8 @@ async def process_price_search(
                     rr = await session.get(u)
                     rr.raise_for_status()
                     ds = BeautifulSoup(await rr.text(), "lxml")
-                    pe = ds.select_one("div.product_after_shop_loop_price span.price")
-                    return t, pe.get_text(" ", strip=True) if pe else "—", u
+                    price = extract_price(ds)
+                    return t, price if price else "—", u
                 except:
                     return t, "ошибка", u
 
@@ -117,8 +155,8 @@ async def process_price_search(
                     rr = await session.get(u)
                     rr.raise_for_status()
                     ds = BeautifulSoup(await rr.text(), "lxml")
-                    pe = ds.select_one("p.price")
-                    return t, pe.get_text(" ", strip=True) if pe else "—", u
+                    price = extract_price(ds)
+                    return t, price if price else "—", u
                 except:
                     return t, "ошибка", u
 
