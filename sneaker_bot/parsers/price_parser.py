@@ -21,16 +21,16 @@ load_dotenv()
 router = Router()
 
 # --- Настройки окружения ---
-HEADERS = {"User-Agent": os.getenv("USER_AGENT", "Mozilla/5.0")}
+HEADERS = {"User-Agent": os.getenv("USER_AGENT")}
 PER_CAT = int(os.getenv("PER_CAT", 5))
 BASE = os.getenv("BASE_URL", "")
 CATALOGS = [
-    urljoin(BASE, os.getenv("CATALOG_MEN_PATH", "")),
-    urljoin(BASE, os.getenv("CATALOG_WOMEN_PATH", "")),
+    urljoin(BASE, os.getenv("CATALOG_MEN_PATH")),
+    urljoin(BASE, os.getenv("CATALOG_WOMEN_PATH")),
 ]
 SNEAKERS = {
-    "женские": os.getenv("SNEAKERS_WOMEN_URL", ""),
-    "мужские": os.getenv("SNEAKERS_MEN_URL", ""),
+    "женские": os.getenv("SNEAKERS_WOMEN_URL"),
+    "мужские": os.getenv("SNEAKERS_MEN_URL"),
 }
 MAX_PAGES_BUNT = int(os.getenv("MAX_PAGES_BUNT", 1))
 MAX_PAGES_SNEAK = int(os.getenv("MAX_PAGES_SNEAK", 1))
@@ -426,7 +426,3 @@ async def size_received(message: Message, state: FSMContext):
     data = await state.get_data()
     query = " ".join(filter(None, [data.get("brand"), data.get("model"), data.get("size")]))
     await record_and_send(message, state, f"Запускаю поиск по: {query}")
-
-    # Если у тебя есть CallbackQuery контекст для process_price_search, адаптируй вызов.
-    # Здесь демонстрация: можно вызвать process_price_search через имитацию CallbackQuery,
-    # либо вынести логику поиска в отдельную функцию, принимающую chat_id и state.
