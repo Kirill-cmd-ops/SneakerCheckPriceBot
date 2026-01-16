@@ -7,7 +7,8 @@ from aiogram.types import CallbackQuery, Message
 
 from sneaker_bot.menu.back_menu import back_menu
 from sneaker_bot.parsers.price_parser import process_price_search
-from sneaker_bot.services.send_messages import record_and_send
+from sneaker_bot.services.send_messages import record_and_send, send_prompt
+from sneaker_bot.services.utils import delete_last_prompt_on_reply
 from sneaker_bot.setting import bot
 from sneaker_bot.sub_checker import is_sub
 from sneaker_bot.tasks import tasks
@@ -37,7 +38,8 @@ async def search_know_button(query: CallbackQuery, state: FSMContext):
 
     await state.set_state(KnowPriceSG.waiting_for_brand)
 
-    prompt = await record_and_send(
+    # отправляем подсказку как prompt (send_prompt) — будет сохранена в prompt_refs
+    prompt = await send_prompt(
         query,
         state,
         text="👇Введите бренд кроссовок (например, Adidas, Nike):👇",
@@ -49,12 +51,16 @@ async def search_know_button(query: CallbackQuery, state: FSMContext):
     except TelegramBadRequest:
         pass
 
+    # опционально сохраняем id подсказки в state, но send_prompt уже добавил в prompt_refs
     await state.update_data(prompt_id=prompt.message_id)
 
 
 @router.message(KnowPriceSG.waiting_for_brand)
 @is_sub
 async def know_button_brand(message: Message, state: FSMContext):
+    # удаляем предыдущую подсказку (тот самый "Введите бренд")
+    await delete_last_prompt_on_reply(state, message.bot, message.chat.id)
+
     brand = message.text.strip().lower()
     await state.update_data(brand=brand)
 
@@ -64,7 +70,9 @@ async def know_button_brand(message: Message, state: FSMContext):
         pass
 
     await state.set_state(KnowPriceSG.waiting_for_model)
-    await record_and_send(
+
+    # отправляем следующую подсказку как prompt
+    await send_prompt(
         message,
         state,
         text="👇Введите название модели (например, Superstar, Air Max).\n"
@@ -76,6 +84,9 @@ async def know_button_brand(message: Message, state: FSMContext):
 @router.message(KnowPriceSG.waiting_for_model)
 @is_sub
 async def know_button_model(message: Message, state: FSMContext):
+    # удаляем предыдущую подсказку "Введите модель"
+    await delete_last_prompt_on_reply(state, message.bot, message.chat.id)
+
     model = message.text.strip().lower()
 
     if model == "посмотреть все":
@@ -89,7 +100,9 @@ async def know_button_model(message: Message, state: FSMContext):
         pass
 
     await state.set_state(KnowPriceSG.waiting_for_size)
-    await record_and_send(
+
+    # отправляем подсказку для размера как prompt
+    await send_prompt(
         message,
         state,
         text="👇Введите размер (например, 42). Если не важно — напишите 'нет':👇",
@@ -100,6 +113,9 @@ async def know_button_model(message: Message, state: FSMContext):
 @router.message(KnowPriceSG.waiting_for_size)
 @is_sub
 async def know_button_size(message: Message, state: FSMContext):
+    # удаляем предыдущую подсказку "Введите размер"
+    await delete_last_prompt_on_reply(state, message.bot, message.chat.id)
+
     size = message.text.strip().lower()
     data = await state.get_data()
 
